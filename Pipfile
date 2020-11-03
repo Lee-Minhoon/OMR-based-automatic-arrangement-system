@@ -8,6 +8,8 @@ verify_ssl = true
 [packages]
 opencv-python = "*"
 numpy = "*"
+pyknon = "*"
+midi2audio = "*"
 
 [requires]
 python_version = "3.8"

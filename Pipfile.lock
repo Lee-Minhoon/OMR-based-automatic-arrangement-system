@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "25929a27ecbd53acd7ad838f418bc2ffe5552d83772d07f2f25752bc7608c94a"
+            "sha256": "ccef312064f56779f35e6bbe36b4764969fae60105d8613c850768d6d8b6b008"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -16,6 +16,14 @@
         ]
     },
     "default": {
+        "midi2audio": {
+            "hashes": [
+                "sha256:762a2df3806d373f7f89962f22ecc6d3cb49f82ae4212fab560a479cbb6c9c08",
+                "sha256:b26590388e1f62753096b075b877e2529ff62faad00c07811ac8111a73e4a78a"
+            ],
+            "index": "pypi",
+            "version": "==0.1.1"
+        },
         "numpy": {
             "hashes": [
                 "sha256:08308c38e44cc926bdfce99498b21eec1f848d24c302519e64203a8da99a97db",
@@ -82,6 +90,13 @@
             ],
             "index": "pypi",
             "version": "==4.4.0.46"
+        },
+        "pyknon": {
+            "hashes": [
+                "sha256:7f9365e8683a6df8b85e929553df077363c958af2c889ba4ed04c3852c8b0eef"
+            ],
+            "index": "pypi",
+            "version": "==1.2"
         }
     },
     "develop": {}
