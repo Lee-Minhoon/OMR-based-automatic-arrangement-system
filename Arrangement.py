@@ -84,6 +84,7 @@ def make_midi(midi_path, notes, bpm, instrument, beat):
             pitch_number = note_names.index(pitch.lower())
 
             result.append(Note(pitch_number, octave=octave, dur=duration, volume=100))
+            print(pitch_number, octave, duration)
 
     duration = 1.0 / beat
     harmony_len = math.ceil(melody_dur / duration)
