@@ -1,7 +1,3 @@
-import socket
-import threading
-import os
-import sys
 import math
 
 from random import *
