@@ -1,4 +1,5 @@
 import cv2
+from dataclasses import dataclass
 
 
 def threshold(image):
@@ -6,6 +7,7 @@ def threshold(image):
     ret, image = cv2.threshold(image, 127, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
     return image
 
+
 def w(value):
-    standard = 8
-    return value * (standard / 20)
+    standard = 10
+    return int(value * (standard / 20))
