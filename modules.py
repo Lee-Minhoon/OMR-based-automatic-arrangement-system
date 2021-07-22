@@ -3,7 +3,7 @@ import numpy as np
 import functions
 
 
-# 전처리 과정 1. 오선 영역 밖 노이즈 제거
+# 과정 1. 오선 영역 밖 노이즈 제거
 def remove_noise(image):
     # 그레이스케일 및 이진화
     image = functions.threshold(image)
@@ -29,7 +29,7 @@ def remove_noise(image):
     return masked_image
 
 
-# 전처리 과정 2. 오선 제거
+# 과정 2. 오선 제거
 def remove_staves(image):
     # 이미지의 세로와 가로 길이를 가져옴
     height, width = image.shape
@@ -71,7 +71,7 @@ def remove_staves(image):
     return image, [x[0] for x in staves]
 
 
-# 전처리 과정 3. 오선 평균 간격을 구하고 이를 이용해 악보 이미지에 가중치를 곱해줌
+# 3. 오선 평균 간격을 구하고 이를 이용해 악보 이미지에 가중치를 곱해줌
 def normalization(image, staves, standard):
     # 오선 평균 길이가 저장될 변수
     avg_distance = 0
@@ -111,12 +111,12 @@ def normalization(image, staves, standard):
     return image, staves
 
 
-# 객체 검출 과정
+# 4. 객체 검출 과정
 def object_detection(image, staves):
-    # 이미지 닫힘 연산을 통해 분리된 객체를 합침 (같은 객체임에도 분리되어 검출되는 것을 막기 위함)
-    closing_image = functions.closing(image)
-    # 닫힘 연산한 이미지에서 윤곽선 검출
-    contours = functions.get_contours(closing_image)
+    # 이미지 팽창 연산을 통해 분리된 객체를 합침 (같은 객체임에도 분리되어 검출되는 것을 막기 위함)
+    dilated_image = functions.dilate(image)
+    # 팽창 연산한 이미지에서 윤곽선 검출
+    contours = functions.get_contours(dilated_image)
     # 총 몇개의 오선 영역인지 구함
     lines = int(len(staves) / 5)
     # 객체 영역만 추출하기 위해 마스크를 준비함
@@ -129,9 +129,7 @@ def object_detection(image, staves):
         # 윤곽선을 감싸는 사각형 객체 반환
         rect = cv2.boundingRect(contour)
         # 악보의 구성요소가 되기 위한 최소 크기 조건
-        width_condition = functions.w(200) >= rect[2] >= functions.w(10)
-        height_condition = functions.w(160) >= rect[3] >= functions.w(10)
-        if width_condition and height_condition:
+        if rect[2] >= functions.w(20) and rect[3] >= functions.w(10):
             # 객체의 중간 y 좌표
             center = (rect[1] + rect[1] + rect[3]) / 2
             for line in range(lines):
@@ -140,12 +138,12 @@ def object_detection(image, staves):
                 note_height_condition = rect[3] >= functions.w(60) or (functions.w(25) >= rect[3] >= functions.w(15))
                 if note_width_condition and note_height_condition:
                     # 음표의 위치 조건
-                    top_limit = staves[line * 5] - functions.w(40)
-                    bot_limit = staves[(line + 1) * 5 - 1] + functions.w(40)
+                    top_limit = staves[line * 5] - functions.w(20)
+                    bot_limit = staves[(line + 1) * 5 - 1] + functions.w(20)
                 else:
                     # 나머지 구성 요소의 위치 조건 (쉼표, 조표 등)
-                    top_limit = staves[line * 5] - functions.w(10)
-                    bot_limit = staves[(line + 1) * 5 - 1] + functions.w(10)
+                    top_limit = staves[line * 5]
+                    bot_limit = staves[(line + 1) * 5 - 1]
                 # 위치 조건이 만족되면 악보의 구성요소로 판단함
                 if top_limit <= center <= bot_limit:
                     # 마스크에 사각형을 그림
@@ -158,50 +156,132 @@ def object_detection(image, staves):
     # 라인 번호, x 좌표 순서대로 객체들을 정렬
     objects.sort()
 
-    return masked_image, objects
+    return image, objects
 
 
-# 객체 분석
+# 5. 객체 분석
 def object_analysis(image, objects):
     # 모든 객체를 돌며
     for obj in objects:
         rect = obj[1]
-        # 객체 내의 모든 직선들을 담을 리스트
-        stems = []
-        # 이미지 가로 길이 (열 탐색)
-        for col in range(rect[0], rect[0] + rect[2]):
-            histogram = 0
-            # 이미지 세로 길이 (행 탐색)
-            for row in range(rect[1], rect[1] + rect[3]):
-                # 객체가 있으면 (흰색 픽셀)
-                if image[row][col] == 255:
-                    # histgram 변수를 증가시킴
-                    histogram += 1
-                    # 도중에 끊기면
-                    if image[row + 1][col] == 0:
-                        # 50이상이면 직선으로 검출하고 해당 열은 더이상 탐색 중지
-                        if histogram > functions.w(50):
-                            stem_x = col
-                            stem_y = row - histogram
-                            stem_w = 0
-                            stem_h = histogram
-                            break
-                        # 50미만이면 직선이 아닌걸로 판단
-                        else:
-                            histogram = 0
-            # 직선을 검출했다면
-            if histogram > functions.w(50):
-                # 새로운 직선이라면
-                if len(stems) == 0 or abs(stems[-1][0] + stems[-1][2] - stem_x) > 1:
-                    stems.append([stem_x, stem_y, stem_w, stem_h])
-                # 이전과 같은 직선이라면
-                else:
-                    stems[-1][2] += 1
+        # 객체 내의 모든 직선들을 검출함
+        stems = functions.stem_detection(image, rect, 60)
         # 객체 리스트에 직선 리스트를 추가
         obj.append(stems)
+        direction = None
+        # 직선이 1개이상 존재함
+        if len(stems) > 0:
+            # 직선이 나중에 발견 되면
+            if stems[0][0] - rect[0] > functions.w(10):
+                # 정 방향 음표
+                direction = True
+            # 직선이 일찍 발견 되면
+            else:
+                # 역 방향 음표
+                direction = False
+            # 객체 리스트에 직선 방향을 추가
+        obj.append(direction)
 
     return image, objects
 
 
-def recognition(image, objects):
+# 6. 객체 인식
+def recognition(image, staves, objects):
+    # 박자와 음이름 리스트
+    beats = []
+    notes = []
+
+    # 모든 객체를 돌며
+    for i in range(len(objects)):
+        obj = objects[i]
+        line = objects[i][0]
+        rect = objects[i][1]
+        stems = objects[i][2]
+        stem_direction = objects[i][3]
+        obj_staves = staves[line * 5 : (line + 1) * 5]
+        if i == 1:
+            key = recognize_key(image, obj_staves, rect)
+        else:
+            note = recognize_note(obj)
+            rest = recognize_rest(obj)
+            # 분석이 끝난 객체에 박스 바운딩
+        cv2.rectangle(image, obj[1], (255, 0, 0), 1)
+        functions.put_text(image, i, (obj[1][0], obj[1][1] - 10))
+
+    return image
+
+
+def recognize_key(image, staves, rect):
+    # 조표가 없을 경우 (다장조일 경우) 박자표가 놓이게 되는 것을 검사
+    no_key_top_condition = staves[0] + functions.w(5) > rect[1] > staves[0] - functions.w(5)
+    no_key_bot_condition = staves[4] + functions.w(5) > rect[1] + rect[3] > staves[4] - functions.w(5)
+    no_key_center_condition = staves[2] + functions.w(5) > rect[1] + rect[1] + rect[3] / 2 > staves[2] - functions.w(5)
+    if no_key_top_condition and no_key_bot_condition and no_key_center_condition:
+        no_key_width_condition = functions.w(35) > rect[2] > functions.w(20)
+        no_key_height_condition = functions.w(90) > rect[3] > functions.w(75)
+        if no_key_width_condition and no_key_height_condition:
+            if functions.count_pixel(image, rect) > functions.w(800):
+                functions.put_text(image, "N", rect[0], rect[1] - 10)
+                return 0
+    # 조표가 있을 경우 (다장조를 제외한 모든 조)
+    else:
+        # 객체 내의 모든 직선들을 검출함
+        stems = functions.stem_detection(image, rect, 30)
+        flat_top_condition = staves[0] + functions.w(10) > stems[0][1] > staves[0] - functions.w(10)
+        flat_bot_condition = staves[3] > stems[0][1] + stems[0][3] > staves[2]
+        # 첫 직선의 위치가 플랫이 처음 놓이게 되는 위치라면
+        if flat_top_condition and flat_bot_condition:
+            functions.put_text(image, "b" + str(len(stems)), (rect[0], rect[1] + rect[3] + 20))
+            return 10 + len(stems)
+        # 첫 직선의 위치가 샾이 처음 놓이게 되는 위치라면
+        else:
+            functions.put_text(image, "#" + str(len(stems)), (rect[0], rect[1] + rect[3] + 20))
+            return 20 + len(stems)
+
+
+def recognize_note(image, staves, rect, stems, stem_direction):
+    # 음표로 가정할 수 있는 최소 크기 조건
+    if functions.w(20) > rect[2] and functions.w(60) > rect[3]:
+        # 정 방향 음표
+        for stem in stems:
+            if stem_direction:
+                head_area_top = stem[1] + stem[3] - functions.w(20)
+                head_area_bot = stem[1] + stem[3] + functions.w(20)
+            else:
+                head_area_top = stem[1] - functions.w(20)
+                head_area_bot = stem[1] + functions.w(20)
+            for row in range(head_area_top, head_area_bot):
+                if stem_direction:
+                    head_area_left = stem[0] - functions.w(20)
+                    head_area_right = stem[0]
+                else:
+                    head_area_left = stem[0] + stem[2]
+                    head_area_right = stem[0] + stem[2] + functions.w(20)
+                histogram = 0
+                head_pixel = 0
+                head_fill_pixel = 0
+                for col in range(head_area_left, head_area_right):
+                    # 흰색 픽셀 개수만큼 histogram 변수를 증가시킴
+                    if image[row][col] == 255:
+                        histogram += 1
+                if histogram > 10:
+                    head_pixel += 1
+                histogram = 0
+                for col in range(head_area_left, head_area_right):
+                    if image[row][col] == 255:
+                        histogram += 1
+                        if image[row + 1][col] == 0:
+                            # 5이상이면 채워진 머리로 판단하고 더 이상 탐색 중지
+                            if histogram > functions.w(5):
+                                break
+                            # 5미만이면 비워진 머리로 판단
+                            else:
+                                histogram = 0
+                if histogram > 10:
+                    head_fill_pixel
+
+    pass
+
+
+def recognize_rest(obj):
     pass
