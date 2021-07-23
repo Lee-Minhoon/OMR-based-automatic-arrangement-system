@@ -202,11 +202,14 @@ def recognition(image, staves, objects):
         if i == 1:
             key = recognize_key(image, obj_staves, rect)
         else:
-            recognize_note(image, rect, stems, stem_direction)
-            # rest = recognize_rest(obj)
+            notes.append(recognize_note(image, rect, stems, stem_direction))
+            rests.append(recognize_rest(obj))
             # 분석이 끝난 객체에 박스 바운딩
         cv2.rectangle(image, obj[1], (255, 0, 0), 1)
         functions.put_text(image, i, (obj[1][0], obj[1][1] - functions.w(20)))
+
+    print(key)
+    print(notes)
 
     return image
 
@@ -241,6 +244,7 @@ def recognize_key(image, staves, rect):
 
 
 def recognize_note(image, rect, stems, stem_direction):
+    note = []
     # 음표로 가정할 수 있는 최소 크기 조건
     if rect[2] > functions.w(20) and rect[3] > functions.w(60):
         # 객체가 가진 모든 직선을 돌며
@@ -251,34 +255,34 @@ def recognize_note(image, rect, stems, stem_direction):
             if head_pixel > functions.w(15):
                 tail_cnt = recognize_note_tail(image, i, stem, stem_direction)
                 point_exist = recognize_note_point(image, stem, stem_direction)
-                half_note_condition = not head_fill and tail_cnt == 0 and not point_exist
-                dotted_half_note_condition = not head_fill and tail_cnt == 0 and point_exist
-                quarter_note_condition = head_fill and tail_cnt == 0 and not point_exist
-                dotted_quarter_note_condition = head_fill and tail_cnt == 0 and point_exist
-                eighth_note_condition = head_fill and tail_cnt == 1 and not point_exist
-                dotted_eighth_note_condition = head_fill and tail_cnt == 1 and point_exist
-                sixteenth_note_condition = head_fill and tail_cnt == 2 and not point_exist
-                dotted_sixteenth_note_condition = head_fill and tail_cnt == 2 and point_exist
+                half_note_condition = not head_fill and tail_cnt == 0 and point_exist == 0
+                dotted_half_note_condition = not head_fill and tail_cnt == 0 and point_exist == 1
+                quarter_note_condition = head_fill and tail_cnt == 0 and point_exist == 0
+                dotted_quarter_note_condition = head_fill and tail_cnt == 0 and point_exist == 1
+                eighth_note_condition = head_fill and tail_cnt == 1 and point_exist == 0
+                dotted_eighth_note_condition = head_fill and tail_cnt == 1 and point_exist == 1
+                sixteenth_note_condition = head_fill and tail_cnt == 2 and point_exist == 0
+                dotted_sixteenth_note_condition = head_fill and tail_cnt == 2 and point_exist == 1
                 if half_note_condition:
-                    beat = 2
+                    note.append(2)
                 elif dotted_half_note_condition:
-                    beat = -2
+                    note.append(-2)
                 elif quarter_note_condition:
-                    beat = 4
+                    note.append(4)
                 elif dotted_quarter_note_condition:
-                    beat = -4
+                    note.append(-4)
                 elif eighth_note_condition:
-                    beat = 8
+                    note.append(8)
                 elif dotted_eighth_note_condition:
-                    beat = -8
+                    note.append(-8)
                 elif sixteenth_note_condition:
-                    beat = 16
+                    note.append(16)
                 elif dotted_sixteenth_note_condition:
-                    beat = -16
-                else:
-                    beat = 0
-                if beat:
-                    functions.put_text(image, str(beat), (stem[0] - functions.w(20), stem[1] + stem[3] + functions.w(60)))
+                    note.append(-16)
+                if len(note):
+                    functions.put_text(image, str(note[i]), (stem[0] - functions.w(20), stem[1] + stem[3] + functions.w(60)))
+
+    return note
 
 
 def recognize_note_head(image, stem, stem_direction):
@@ -297,7 +301,9 @@ def recognize_note_head(image, stem, stem_direction):
         head_area_left = stem[0] + stem[2]
         head_area_right = stem[0] + stem[2] + functions.w(20)
     head_pixel = 0
+    head_pixel_max = 0
     head_fill_pixel = 0
+    head_fill_pixel_max = 0
     # 머리 탐색 (행)
     for row in range(head_area_top, head_area_bot):
         pixels = 0
@@ -309,12 +315,19 @@ def recognize_note_head(image, stem, stem_direction):
         # head_pixel = 채워진 머리인지, 빈 머리인지 구분 짓지않음
         if pixels > functions.w(10):
             head_pixel += 1
+            head_pixel_max = max(head_pixel_max, pixels)
         col_range = (head_area_left, head_area_right)
         col, pixels = functions.count_line_pixels(image, True, row, col_range, 10)
         # head_fill_pixel = 끊기지 않는 선들만 카운트 (채워진 머리)
         if pixels > functions.w(10):
             head_fill_pixel += 1
-    head_fill = head_fill_pixel > functions.w(10)
+            head_fill_pixel_max = max(head_fill_pixel_max, pixels)
+    if head_fill_pixel < functions.w(10) and head_pixel_max < functions.w(10) and head_fill_pixel_max < functions.w(5):
+        head_fill = 0
+    elif head_fill_pixel >= functions.w(10) and head_fill_pixel_max >= functions.w(20):
+        head_fill = 1
+    else:
+        head_fill = -1
 
     return head_fill, head_pixel
 
@@ -338,12 +351,14 @@ def recognize_note_tail(image, index, stem, stem_direction):
     for row in range(wing_area_top, wing_area_bot):
         if image[row][wing_area_col] == 255:
             pixels += 1
-    if pixels > functions.w(16):
-        tail_cnt = 2
-    elif pixels > functions.w(5):
-        tail_cnt = 1
-    else:
+    if pixels < functions.w(6):
         tail_cnt = 0
+    elif pixels < functions.w(16):
+        tail_cnt = 1
+    elif pixels < functions.w(24):
+        tail_cnt = 2
+    else:
+        tail_cnt = -1
 
     return tail_cnt
 
@@ -368,7 +383,12 @@ def recognize_note_point(image, stem, stem_direction):
         point_area_bot - point_area_top
     )
     pixels = functions.count_rect_pixels(image, point_rect)
-    point_exist = pixels > functions.w(15)
+    if pixels < functions.w(14):
+        point_exist = 0
+    elif pixels < functions.w(40):
+        point_exist = 1
+    else:
+        point_exist = -1
 
     return point_exist
 
