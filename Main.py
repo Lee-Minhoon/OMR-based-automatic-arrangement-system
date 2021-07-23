@@ -6,6 +6,7 @@ import modules
 
 # 악보 이미지 로드
 resource_path = os.getcwd() + "/resource/"
+# image_0 = cv2.imread(resource_path + "nmusic15.jpg")
 image_0 = cv2.imread(resource_path + "nmusic15.jpg")
 
 # 1. 오선 영역 밖 노이즈 제거
@@ -31,18 +32,17 @@ image_4, objects = modules.object_detection(image_3, staves)
 
 # 5. 객체 분석
 image_5, objects = modules.object_analysis(image_4, objects)
-print(objects)
-for obj in objects:
-    print(
-        "[line : " + str(obj[0]) +
-        ", rect : (x : " + str(obj[1][0]) +
-        ", y : " + str(obj[1][1]) +
-        ", w : " + str(obj[1][2]) +
-        ", h : " + str(obj[1][3]) +
-        "), stems : " + str(len(obj[2])) +
-        ", stem direction : " + str(obj[3]) +
-        "]"
-    )
+# for obj in objects:
+#     print(
+#         "[line : " + str(obj[0]) +
+#         ", rect : (x : " + str(obj[1][0]) +
+#         ", y : " + str(obj[1][1]) +
+#         ", w : " + str(obj[1][2]) +
+#         ", h : " + str(obj[1][3]) +
+#         "), stems : " + str(len(obj[2])) +
+#         ", stem direction : " + str(obj[3]) +
+#         "]"
+#     )
     
 # 6. 객체 인식
 image_6 = modules.recognition(image_5, staves, objects)

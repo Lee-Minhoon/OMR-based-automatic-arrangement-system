@@ -198,15 +198,15 @@ def recognition(image, staves, objects):
         rect = objects[i][1]
         stems = objects[i][2]
         stem_direction = objects[i][3]
-        obj_staves = staves[line * 5 : (line + 1) * 5]
+        obj_staves = staves[line * 5: (line + 1) * 5]
         if i == 1:
             key = recognize_key(image, obj_staves, rect)
         else:
-            note = recognize_note(obj)
-            rest = recognize_rest(obj)
+            recognize_note(image, rect, stems, stem_direction)
+            # rest = recognize_rest(obj)
             # 분석이 끝난 객체에 박스 바운딩
         cv2.rectangle(image, obj[1], (255, 0, 0), 1)
-        functions.put_text(image, i, (obj[1][0], obj[1][1] - 10))
+        functions.put_text(image, i, (obj[1][0], obj[1][1] - functions.w(20)))
 
     return image
 
@@ -220,9 +220,8 @@ def recognize_key(image, staves, rect):
         no_key_width_condition = functions.w(35) > rect[2] > functions.w(20)
         no_key_height_condition = functions.w(90) > rect[3] > functions.w(75)
         if no_key_width_condition and no_key_height_condition:
-            if functions.count_pixel(image, rect) > functions.w(800):
-                functions.put_text(image, "N", rect[0], rect[1] - 10)
-                return 0
+            if functions.count_rect_pixels(image, rect) > functions.w(800):
+                key = 0
     # 조표가 있을 경우 (다장조를 제외한 모든 조)
     else:
         # 객체 내의 모든 직선들을 검출함
@@ -231,56 +230,147 @@ def recognize_key(image, staves, rect):
         flat_bot_condition = staves[3] > stems[0][1] + stems[0][3] > staves[2]
         # 첫 직선의 위치가 플랫이 처음 놓이게 되는 위치라면
         if flat_top_condition and flat_bot_condition:
-            functions.put_text(image, "b" + str(len(stems)), (rect[0], rect[1] + rect[3] + 20))
-            return 10 + len(stems)
+            functions.put_text(image, "b" + str(len(stems)), (rect[0], rect[1] + rect[3] + functions.w(60)))
+            key = 10 + len(stems)
         # 첫 직선의 위치가 샾이 처음 놓이게 되는 위치라면
         else:
-            functions.put_text(image, "#" + str(len(stems)), (rect[0], rect[1] + rect[3] + 20))
-            return 20 + len(stems)
+            functions.put_text(image, "#" + str(len(stems)), (rect[0], rect[1] + rect[3] + functions.w(60)))
+            key = 20 + len(stems)
+
+    return key
 
 
-def recognize_note(image, staves, rect, stems, stem_direction):
+def recognize_note(image, rect, stems, stem_direction):
     # 음표로 가정할 수 있는 최소 크기 조건
-    if functions.w(20) > rect[2] and functions.w(60) > rect[3]:
-        # 정 방향 음표
-        for stem in stems:
-            if stem_direction:
-                head_area_top = stem[1] + stem[3] - functions.w(20)
-                head_area_bot = stem[1] + stem[3] + functions.w(20)
-            else:
-                head_area_top = stem[1] - functions.w(20)
-                head_area_bot = stem[1] + functions.w(20)
-            for row in range(head_area_top, head_area_bot):
-                if stem_direction:
-                    head_area_left = stem[0] - functions.w(20)
-                    head_area_right = stem[0]
+    if rect[2] > functions.w(20) and rect[3] > functions.w(60):
+        # 객체가 가진 모든 직선을 돌며
+        for i in range(len(stems)):
+            stem = stems[i]
+            head_fill, head_pixel = recognize_note_head(image, stem, stem_direction)
+            # 음표 머리에 해당하는 부분이 있다고 판단되면
+            if head_pixel > functions.w(15):
+                tail_cnt = recognize_note_tail(image, i, stem, stem_direction)
+                point_exist = recognize_note_point(image, stem, stem_direction)
+                half_note_condition = not head_fill and tail_cnt == 0 and not point_exist
+                dotted_half_note_condition = not head_fill and tail_cnt == 0 and point_exist
+                quarter_note_condition = head_fill and tail_cnt == 0 and not point_exist
+                dotted_quarter_note_condition = head_fill and tail_cnt == 0 and point_exist
+                eighth_note_condition = head_fill and tail_cnt == 1 and not point_exist
+                dotted_eighth_note_condition = head_fill and tail_cnt == 1 and point_exist
+                sixteenth_note_condition = head_fill and tail_cnt == 2 and not point_exist
+                dotted_sixteenth_note_condition = head_fill and tail_cnt == 2 and point_exist
+                if half_note_condition:
+                    beat = 2
+                elif dotted_half_note_condition:
+                    beat = -2
+                elif quarter_note_condition:
+                    beat = 4
+                elif dotted_quarter_note_condition:
+                    beat = -4
+                elif eighth_note_condition:
+                    beat = 8
+                elif dotted_eighth_note_condition:
+                    beat = -8
+                elif sixteenth_note_condition:
+                    beat = 16
+                elif dotted_sixteenth_note_condition:
+                    beat = -16
                 else:
-                    head_area_left = stem[0] + stem[2]
-                    head_area_right = stem[0] + stem[2] + functions.w(20)
-                histogram = 0
-                head_pixel = 0
-                head_fill_pixel = 0
-                for col in range(head_area_left, head_area_right):
-                    # 흰색 픽셀 개수만큼 histogram 변수를 증가시킴
-                    if image[row][col] == 255:
-                        histogram += 1
-                if histogram > 10:
-                    head_pixel += 1
-                histogram = 0
-                for col in range(head_area_left, head_area_right):
-                    if image[row][col] == 255:
-                        histogram += 1
-                        if image[row + 1][col] == 0:
-                            # 5이상이면 채워진 머리로 판단하고 더 이상 탐색 중지
-                            if histogram > functions.w(5):
-                                break
-                            # 5미만이면 비워진 머리로 판단
-                            else:
-                                histogram = 0
-                if histogram > 10:
-                    head_fill_pixel
+                    beat = 0
+                if beat:
+                    functions.put_text(image, str(beat), (stem[0] - functions.w(20), stem[1] + stem[3] + functions.w(60)))
 
-    pass
+
+def recognize_note_head(image, stem, stem_direction):
+    # 정 방향 음표
+    if stem_direction:
+        # 음표 머리가 있는지, 어떤 모양인지 탐색할 위치
+        head_area_top = stem[1] + stem[3] - functions.w(20)
+        head_area_bot = stem[1] + stem[3] + functions.w(20)
+        head_area_left = stem[0] - functions.w(20)
+        head_area_right = stem[0]
+    # 역 방향 음표
+    else:
+        # 음표 머리가 있는지, 어떤 모양인지 탐색할 위치 (top, bot)
+        head_area_top = stem[1] - functions.w(20)
+        head_area_bot = stem[1] + functions.w(20)
+        head_area_left = stem[0] + stem[2]
+        head_area_right = stem[0] + stem[2] + functions.w(20)
+    head_pixel = 0
+    head_fill_pixel = 0
+    # 머리 탐색 (행)
+    for row in range(head_area_top, head_area_bot):
+        pixels = 0
+        # 머리 탐색 (열)
+        for col in range(head_area_left, head_area_right):
+            # 흰색 픽셀 개수만큼 histogram 변수를 증가시킴
+            if image[row][col] == 255:
+                pixels += 1
+        # head_pixel = 채워진 머리인지, 빈 머리인지 구분 짓지않음
+        if pixels > functions.w(10):
+            head_pixel += 1
+        col_range = (head_area_left, head_area_right)
+        col, pixels = functions.count_line_pixels(image, True, row, col_range, 10)
+        # head_fill_pixel = 끊기지 않는 선들만 카운트 (채워진 머리)
+        if pixels > functions.w(10):
+            head_fill_pixel += 1
+    head_fill = head_fill_pixel > functions.w(10)
+
+    return head_fill, head_pixel
+
+
+def recognize_note_tail(image, index, stem, stem_direction):
+    # 정 방향 음표
+    if stem_direction:
+        # 음표 꼬리가 있는지, 몇 개인지 탐색할 위치
+        wing_area_top = stem[1]
+        wing_area_bot = stem[1] + stem[3] - functions.w(20)
+    # 역 방향 음표
+    else:
+        # 음표 꼬리가 있는지, 몇 개인지 탐색할 위치
+        wing_area_top = stem[1] + functions.w(20)
+        wing_area_bot = stem[1] + stem[3]
+    if index:
+        wing_area_col = stem[0] - functions.w(7)
+    else:
+        wing_area_col = stem[0] + stem[2] + functions.w(7)
+    pixels = 0
+    for row in range(wing_area_top, wing_area_bot):
+        if image[row][wing_area_col] == 255:
+            pixels += 1
+    if pixels > functions.w(16):
+        tail_cnt = 2
+    elif pixels > functions.w(5):
+        tail_cnt = 1
+    else:
+        tail_cnt = 0
+
+    return tail_cnt
+
+
+def recognize_note_point(image, stem, stem_direction):
+    point_area_top = stem[1] + stem[3] - functions.w(10)
+    point_area_bot = stem[1] + stem[3] + functions.w(10)
+    # 정 방향 음표
+    if stem_direction:
+        # 점 음표 인지, 아닌지 탐색할 위치
+        point_area_left = stem[0] + stem[2] + functions.w(5)
+        point_area_right = stem[0] + stem[2] + functions.w(15)
+    # 역 방향 음표
+    else:
+        # 점 음표 인지, 아닌지 탐색할 위치
+        point_area_left = stem[0] + stem[2] + functions.w(30)
+        point_area_right = stem[0] + stem[2] + functions.w(40)
+    point_rect = (
+        point_area_left,
+        point_area_top,
+        point_area_right - point_area_left,
+        point_area_bot - point_area_top
+    )
+    pixels = functions.count_rect_pixels(image, point_rect)
+    point_exist = pixels > functions.w(15)
+
+    return point_exist
 
 
 def recognize_rest(obj):
