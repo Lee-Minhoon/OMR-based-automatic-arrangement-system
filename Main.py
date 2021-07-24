@@ -4,7 +4,7 @@ import modules
 
 # 악보 이미지 로드
 resource_path = os.getcwd() + "/resource/"
-image_0 = cv2.imread(resource_path + "nmusic1.jpg")  # 15
+image_0 = cv2.imread(resource_path + "nmusic0.jpg")  # 15
 
 # 전처리 과정 1. 보표 영역 추출 및 그 외 노이즈 제거
 image_1 = modules.remove_noise(image_0)

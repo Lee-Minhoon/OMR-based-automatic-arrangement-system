@@ -41,8 +41,9 @@ def recognize_key(image, staves, rect):
 각 머리(head), 기둥(stem), 꼬리(tail), 점(dot)이다.
 '''
 # ==============================================================
-def recognize_note(image, rect, stems, stem_direction):
-    note = []
+def recognize_note(image, staves, rect, stems, stem_direction):
+    notes = []
+    pitches = []
     if rect[2] > fs.w(20) and rect[3] > fs.w(60):  # 음표로 가정할 수 있는 최소 넓이, 높이 조건 (온 음표, 2분 음표 제외)
         for i in range(len(stems)):
             stem = stems[i]
@@ -51,25 +52,29 @@ def recognize_note(image, rect, stems, stem_direction):
                 tail_cnt = recognize_note_tail(image, i, stem, stem_direction)  # 음표 꼬리 개수
                 dot_exist = recognize_note_dot(image, stem, stem_direction)  # 점 존재 여부
                 if not head_fill and tail_cnt == 0 and dot_exist == 0:  # 2분음표
-                    note.append(2)
+                    note = 2
                 elif not head_fill and tail_cnt == 0 and dot_exist == 1:  # 점2분음표
-                    note.append(-2)
+                    note = -2
                 elif head_fill and tail_cnt == 0 and dot_exist == 0:  # 4분음표
-                    note.append(4)
+                    note = 4
                 elif head_fill and tail_cnt == 0 and dot_exist == 1:  # 점4분음표
-                    note.append(-4)
+                    note = -4
                 elif head_fill and tail_cnt == 1 and dot_exist == 0:  # 8분음표
-                    note.append(8)
+                    note = 8
                 elif head_fill and tail_cnt == 1 and dot_exist == 1:  # 점8분음표
-                    note.append(-8)
+                    note = -8
                 elif head_fill and tail_cnt == 2 and dot_exist == 0:  # 16분음표
-                    note.append(16)
+                    note = 16
                 elif head_fill and tail_cnt == 2 and dot_exist == 1:  # 점16분음표
-                    note.append(-16)
-                if len(note):  # 음표로 분류됨
-                    fs.put_text(image, str(note[i]), (stem[0] - fs.w(20), stem[1] + stem[3] + fs.w(60)))
+                    note = -16
+                else:
+                    note = 0
+                if note:  # 음표로 분류됨
+                    notes.append(note)
+                    fs.put_text(image, note, (stem[0] - fs.w(20), stem[1] + stem[3] + fs.w(60)))
+                    pitches.append(recognize_pitch(image, staves, stem, stem_direction))
 
-    return note
+    return notes, pitches
 
 
 # 음표 머리 인식 함수
@@ -189,6 +194,18 @@ def recognize_note_dot(image, stem, stem_direction):
     return dot_exist
 
 
+def recognize_pitch(image, staves, stem, stem_direction):
+    if stem_direction:  # 정 방향 음표
+        head_center = stem[1] + stem[3]
+    else:  # 역 방향 음표
+        head_center = stem[1]
+    pitch_lines = [staves[4] + fs.w(60) - fs.w(10) * i for i in range(21)]
+    for i in range(len(pitch_lines)):
+        line = pitch_lines[i]
+        if line + fs.w(7) >= head_center >= line - fs.w(7):
+            return i
+
+
 # 쉼표 인식 함수
 # ==============================================================
 '''
@@ -203,6 +220,7 @@ def recognize_rest(image, staves, rect):
     if rest_condition:
         # fs.put_text(image, fs.count_rect_pixels(image, rect), (rect[0], rect[1] + rect[3] + fs.w(60)))
         # fs.put_text(image, rect[3], (rect[0], rect[1] + rect[3] + fs.w(60)))
+        # fs.put_text(image, rect[2], (rect[0], rect[1] + rect[3] + fs.w(60)))
         if fs.w(30) >= rect[2] >= fs.w(25) and fs.w(20) >= rect[3] >= fs.w(14):  # 온쉼표와 2분쉼표의 넓이, 높이 조건
             if fs.w(470) >= fs.count_rect_pixels(image, rect) >= fs.w(370):  # 온쉼표와 2분쉼표의 픽셀 개수 조건
                 whole_rest_condition = staves[1] + fs.w(10) >= center >= staves[1]
@@ -211,13 +229,13 @@ def recognize_rest(image, staves, rect):
                 rest = 1
             if half_rest_condition:
                 rest = 2
-        elif fs.w(25) >= rect[2] >= fs.w(20) and fs.w(65) >= rect[3] >= fs.w(50):  # 4분쉼표의 넓이, 높이 조건
-            if fs.w(800) >= fs.count_rect_pixels(image, rect) >= fs.w(550):  # 4분쉼표의 픽셀 개수 조건
+        elif fs.w(35) >= rect[2] >= fs.w(25) and fs.w(75) >= rect[3] >= fs.w(60):  # 4분쉼표의 넓이, 높이 조건
+            if fs.w(320) >= fs.count_rect_pixels(image, rect) >= fs.w(240):  # 4분쉼표의 픽셀 개수 조건
                 rest = 4
         elif fs.w(35) >= rect[2] >= fs.w(25) and fs.w(60) >= rect[3] >= fs.w(40):
-            if fs.w(150) >= fs.count_rect_pixels(image, rect) >= fs.w(110):
+            if fs.w(150) >= fs.count_rect_pixels(image, rect) >= fs.w(90):
                 rest = 8
     if rest:
         fs.put_text(image, "r" + str(rest), (rect[0], rect[1] + rect[3] + fs.w(60)))
 
-    return rest
+    return rest, -1

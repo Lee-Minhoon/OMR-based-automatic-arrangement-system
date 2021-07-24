@@ -181,17 +181,22 @@ def recognition(image, staves, objects):
         if i == 1:
             key = rs.recognize_key(image, obj_staves, rect)
         else:
-            note = rs.recognize_note(image, rect, stems, stem_direction)
+            note, pitch = rs.recognize_note(image, obj_staves, rect, stems, stem_direction)
             if len(note):
-                notes.append(note)
+                beats.append(note)
+                notes.append(pitch)
             else:
-                notes.append(rs.recognize_rest(image, obj_staves, rect))
+                note, pitch = rs.recognize_rest(image, obj_staves, rect)
+                if note:
+                    beats.append(note)
+                    notes.append(pitch)
 
             # 분석이 끝난 객체에 박스 바운딩
         cv2.rectangle(image, obj[1], (255, 0, 0), 1)
         fs.put_text(image, i, (obj[1][0], obj[1][1] - fs.w(20)))
 
     print(key)
+    print(beats)
     print(notes)
 
     return image

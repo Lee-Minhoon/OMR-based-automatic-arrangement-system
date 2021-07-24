@@ -14,7 +14,7 @@ def get_contours(image):
 
 
 def dilate(image):
-    kernel = np.ones((w(12), w(12)), np.uint8)
+    kernel = np.ones((w(15), w(15)), np.uint8)
     image = cv2.dilate(image, kernel)
     return image
 
