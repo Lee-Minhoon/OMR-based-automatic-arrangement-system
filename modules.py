@@ -125,9 +125,11 @@ def object_detection(image, staves):
         if obj[2] >= fs.w(26) and obj[3] >= fs.w(24):  # 악보의 구성요소가 되기 위한 넓이, 높이 조건
             center = fs.get_center(obj)  # 객체의 중간 y 좌표
             for line in range(lines):
-                note_width_condition = obj[2] >= fs.w(35)  # 음표의 넓이 조건
-                note_height_condition = obj[3] >= fs.w(80) or fs.w(30) >= obj[3] >= fs.w(20)  # 음표의 높이 조건
-                if note_width_condition and note_height_condition:
+                note_conditions = (
+                    obj[2] >= fs.w(35) and  # 넓이 조건
+                    obj[3] >= fs.w(80) or fs.w(30) >= obj[3] >= fs.w(20)  # 높이 조건
+                )
+                if note_conditions:
                     area_top = staves[line * 5] - fs.w(20)  # 음표의 위치 조건 (상단)
                     area_bot = staves[(line + 1) * 5 - 1] + fs.w(20)  # 음표의 위치 조건 (하단)
                 else:

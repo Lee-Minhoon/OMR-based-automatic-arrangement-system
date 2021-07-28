@@ -38,9 +38,9 @@ def recognize_key(image, staves, rect):
 # 2. 음표 인식 함수
 # ======================================================================================================================
 '''
-음표는 객체에서 추출할 수 있는 여러 특징점들을 조합해 분류할 수 있다.
-음표로 추정되는 객체를 분류하기 위해선 4가지 특징점들을 추출해야 한다.
-각 머리(head), 기둥(stem), 꼬리(tail), 점(dot)이다.
+1. 음표는 객체에서 추출할 수 있는 여러 특징점들을 조합해 분류할 수 있다.
+2. 음표로 추정되는 객체를 분류하기 위해선 4가지 특징점들을 추출해야 한다.
+3. 각 머리(head), 기둥(stem), 꼬리(tail), 점(dot)이다.
 '''
 # ======================================================================================================================
 def recognize_note(image, staves, rect, stems, stem_direction):
@@ -49,28 +49,26 @@ def recognize_note(image, staves, rect, stems, stem_direction):
     if rect[2] > fs.w(20) and rect[3] > fs.w(60):  # 음표로 가정할 수 있는 최소 넓이, 높이 조건 (온 음표, 2분 음표 제외)
         for i in range(len(stems)):
             stem = stems[i]
-            head_pixel, head_fill = recognize_note_head(image, stem, stem_direction)
+            head_pixel, head_fill = recognize_note_head(image, stem, stem_direction)  # 음표 머리 픽셀, 채워져 있는지 여부
             if head_pixel > fs.w(15):  # 음표 머리에 해당하는 부분이 있다고 판단되면
                 tail_cnt = recognize_note_tail(image, i, stem, stem_direction)  # 음표 꼬리 개수
                 dot_exist = recognize_note_dot(image, stem, stem_direction)  # 점 존재 여부
-                if not head_fill and tail_cnt == 0 and dot_exist == 0:  # 2분음표
-                    note = 2
-                elif not head_fill and tail_cnt == 0 and dot_exist == 1:  # 점2분음표
-                    note = -2
-                elif head_fill and tail_cnt == 0 and dot_exist == 0:  # 4분음표
-                    note = 4
-                elif head_fill and tail_cnt == 0 and dot_exist == 1:  # 점4분음표
-                    note = -4
-                elif head_fill and tail_cnt == 1 and dot_exist == 0:  # 8분음표
-                    note = 8
-                elif head_fill and tail_cnt == 1 and dot_exist == 1:  # 점8분음표
-                    note = -8
-                elif head_fill and tail_cnt == 2 and dot_exist == 0:  # 16분음표
-                    note = 16
-                elif head_fill and tail_cnt == 2 and dot_exist == 1:  # 점16분음표
-                    note = -16
-                else:
-                    note = 0
+                note_conditions = (
+                    ((not head_fill and tail_cnt == 0 and dot_exist == 0), 2),  # 2분음표
+                    ((not head_fill and tail_cnt == 0 and dot_exist == 1), -2),  # 점2분음표
+                    ((head_fill and tail_cnt == 0 and dot_exist == 0), 4),  # 4분음표
+                    ((head_fill and tail_cnt == 0 and dot_exist == 1), -4),  # 점4분음표
+                    ((head_fill and tail_cnt == 1 and dot_exist == 0), 8),  # 8분음표
+                    ((head_fill and tail_cnt == 1 and dot_exist == 1), -8),  # 점8분음표
+                    ((head_fill and tail_cnt == 2 and dot_exist == 0), 16),  # 16분음표
+                    ((head_fill and tail_cnt == 2 and dot_exist == 1), -16),  # 점16분음표
+                    (1, 0)
+                )
+
+                for condition in note_conditions:
+                    if condition[0]:
+                        note = condition[1]
+
                 if note:  # 음표로 분류됨
                     notes.append(note)
                     fs.put_text(image, note, (stem[0] - fs.w(20), stem[1] + stem[3] + fs.w(60)))
@@ -82,10 +80,9 @@ def recognize_note(image, staves, rect, stems, stem_direction):
 # 2-1. 음표 머리 인식 함수
 # ======================================================================================================================
 '''
-음표의 머리는 음표의 기둥(stem) 위치를 이용해 탐색해볼 수 있다.
-정 방향 음표는 음표의 기둥 왼쪽 아래, 역 방향 음표는 음표의 기둥 오른쪽 위에
-존재한다. 해당 부분을 히스토그램을 통해 탐색한다면 머리가 존재하는지,
-존재한다면 채워져 있는지 비었는지 분류할 수 있다.
+1. 음표의 머리는 음표의 기둥(stem) 위치를 이용해 탐색해볼 수 있다.
+2. 정 방향 음표는 음표의 기둥 왼쪽 아래, 역 방향 음표는 음표의 기둥 오른쪽 위에 존재한다.
+3, 해당 부분을 히스토그램을 통해 탐색한다면 머리가 존재하는지, 존재한다면 채워져 있는지 비었는지 분류할 수 있다.
 '''
 # ======================================================================================================================
 def recognize_note_head(image, stem, stem_direction):
@@ -99,15 +96,16 @@ def recognize_note_head(image, stem, stem_direction):
         head_area_bot = stem[1] + fs.w(20)  # 음표 머리를 탐색할 위치 (하단)
         head_area_left = stem[0] + stem[2]  # 음표 머리를 탐색할 위치 (좌측)
         head_area_right = stem[0] + stem[2] + fs.w(20)  # 음표 머리를 탐색할 위치 (우측)
+
     head_pixel = 0  # head_pixel = 채워져있는 머리인지, 비어있는 머리인지 구분 짓지않고 픽셀의 개수를 셈
     head_pixel_max = 0  # head_pixel_max = head_pixel 중 가장 큰 값
     head_fill_pixel = 0  # head_fill_pixel = 끊기지 않고 이어져 있는 선의 픽셀 개수를 셈 (채워진 머리)
     head_fill_pixel_max = 0  # head_fill_pixel_max = head_fill_pixel 중 가장 큰 값
+
     for row in range(head_area_top, head_area_bot):
         pixels = 0
         for col in range(head_area_left, head_area_right):
-            if image[row][col] == 255:
-                pixels += 1
+            pixels += (image[row][col] == 255)
         if pixels >= fs.w(10):
             head_pixel += 1
             head_pixel_max = max(head_pixel_max, pixels)
@@ -116,6 +114,7 @@ def recognize_note_head(image, stem, stem_direction):
         if pixels >= fs.w(10):
             head_fill_pixel += 1
             head_fill_pixel_max = max(head_fill_pixel_max, pixels)
+
     if head_fill_pixel < fs.w(10) and head_pixel_max < fs.w(10) and head_fill_pixel_max < fs.w(5):  # 머리가 비어있음
         head_fill = 0
     elif head_fill_pixel >= fs.w(10) and head_fill_pixel_max >= fs.w(20):  # 머리가 채워져있음
@@ -129,10 +128,9 @@ def recognize_note_head(image, stem, stem_direction):
 # 2-2. 음표 꼬리 인식 함수
 # ======================================================================================================================
 '''
-음표의 꼬리는 음표의 기둥(stem) 위치를 이용해 탐색해볼 수 있다.
-정 방향 음표는 음표의 기둥 오른쪽 위에, 역 방향 음표는 음표의 기둥 오른쪽 아래에
-존재한다. 해당 부분을 히스토그램을 통해 탐색한다면 꼬리가 존재하는지,
-존재한다면 몇개가 있는지 분류할 수 있다.
+1. 음표의 꼬리는 음표의 기둥(stem) 위치를 이용해 탐색해볼 수 있다.
+2. 정 방향 음표는 음표의 기둥 오른쪽 위에, 역 방향 음표는 음표의 기둥 오른쪽 아래에 존재한다.
+3. 해당 부분을 히스토그램을 통해 탐색한다면 꼬리가 존재하는지, 존재한다면 몇개가 있는지 분류할 수 있다.
 '''
 # ======================================================================================================================
 def recognize_note_tail(image, index, stem, stem_direction):
@@ -146,10 +144,11 @@ def recognize_note_tail(image, index, stem, stem_direction):
         tail_area_col = stem[0] - fs.w(7)  # 음표 꼬리를 탐색할 위치 (열)
     else:
         tail_area_col = stem[0] + stem[2] + fs.w(7)  # 음표 꼬리를 탐색할 위치 (열)
+
     pixels = 0
     for row in range(tail_area_top, tail_area_bot):
-        if image[row][tail_area_col] == 255:
-            pixels += 1
+        pixels += (image[row][tail_area_col] == 255)
+
     if pixels < fs.w(6):  # 꼬리가 발견되지 않음
         tail_cnt = 0
     elif pixels < fs.w(16):  # 꼬리 1개
@@ -165,9 +164,9 @@ def recognize_note_tail(image, index, stem, stem_direction):
 # 2-3. 음표 점 인식 함수
 # ======================================================================================================================
 '''
-음표의 점은 음표의 기둥(stem) 위치를 이용해 탐색해볼 수 있다.
-정 방향 음표는 음표의 기둥 오른쪽 아래에, 역 방향 음표는 음표의 기둥 오른쪽 위에
-존재한다. 해당 부분을 탐색해 픽셀의 개수를 살펴보면 점이 존재하는지 알 수 있다.
+1. 음표의 점은 음표의 기둥(stem) 위치를 이용해 탐색해볼 수 있다.
+2. 정 방향 음표는 음표의 기둥 오른쪽 아래에, 역 방향 음표는 음표의 기둥 오른쪽 위에 존재한다.
+3. 해당 부분을 탐색해 픽셀의 개수를 살펴보면 점이 존재하는지 알 수 있다.
 '''
 # ======================================================================================================================
 def recognize_note_dot(image, stem, stem_direction):
@@ -185,7 +184,9 @@ def recognize_note_dot(image, stem, stem_direction):
         dot_area_right - dot_area_left,
         dot_area_bot - dot_area_top
     )
+
     pixels = fs.count_rect_pixels(image, dot_rect)
+
     if pixels < fs.w(14):  # 점이 발견되지 않음
         dot_exist = 0
     elif pixels < fs.w(40):  # 점이 발견됨
@@ -196,12 +197,21 @@ def recognize_note_dot(image, stem, stem_direction):
     return dot_exist
 
 
+# 2-4. 음 높낮이 인식 함수
+# ======================================================================================================================
+'''
+1. 음의 높낮이는 음표머리의 위치와 오선의 좌표를 비교하면 쉽게 알 수 있다.
+2. 정 방향 음표의 경우 음표 기둥의 하단, 역 방향 음표의 경우 음표 기둥의 상단이 음표 머리의 중단 y 좌표이다.
+'''
+# ======================================================================================================================
 def recognize_pitch(image, staves, stem, stem_direction):
     if stem_direction:  # 정 방향 음표
         head_center = stem[1] + stem[3]
     else:  # 역 방향 음표
         head_center = stem[1]
+
     pitch_lines = [staves[4] + fs.w(60) - fs.w(10) * i for i in range(21)]
+
     for i in range(len(pitch_lines)):
         line = pitch_lines[i]
         if line + fs.w(7) >= head_center >= line - fs.w(7):
@@ -211,8 +221,8 @@ def recognize_pitch(image, staves, stem, stem_direction):
 # 3. 쉼표 인식 함수
 # ======================================================================================================================
 '''
-쉼표는 보표에서 항상 고정된 위치에 있기 때문에, 이를 이용해 쉽게 분류할 수 있다.
-그 외 픽셀의 개수등 다양한 조건을 추가해 좀 더 엄격하게 탐색해볼 수 있다.
+1. 쉼표는 보표에서 항상 고정된 위치에 있기 때문에, 이를 이용해 쉽게 분류할 수 있다.
+2. 픽셀의 개수 등 다양한 조건을 추가해 좀 더 엄격하게 탐색할 수 있다.
 '''
 # ======================================================================================================================
 def recognize_rest(image, staves, rect):

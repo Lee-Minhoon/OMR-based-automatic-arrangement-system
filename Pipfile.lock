@@ -90,13 +90,6 @@
             ],
             "index": "pypi",
             "version": "==4.4.0.46"
-        },
-        "pyknon": {
-            "hashes": [
-                "sha256:7f9365e8683a6df8b85e929553df077363c958af2c889ba4ed04c3852c8b0eef"
-            ],
-            "index": "pypi",
-            "version": "==1.2"
         }
     },
     "develop": {}
