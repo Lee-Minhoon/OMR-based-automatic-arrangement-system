@@ -4,18 +4,18 @@ import modules
 
 # 악보 이미지 로드
 resource_path = os.getcwd() + "/resource/"
-image_0 = cv2.imread(resource_path + "nmusic0.jpg")  # 15
+image_0 = cv2.imread(resource_path + "nmusic15.jpg")  # 15
 
-# 전처리 과정 1. 보표 영역 추출 및 그 외 노이즈 제거
+# 1. 보표 영역 추출 및 그 외 노이즈 제거
 image_1 = modules.remove_noise(image_0)
 
-# 전처리 과정 2. 오선 제거
+# 2. 오선 제거
 image_2, staves = modules.remove_staves(image_1)
 
-# 전처리 과정 3. 오선 평균 간격을 구하고 이를 이용해 악보 이미지에 가중치를 곱해줌
+# 3. 악보 이미지 정규화
 image_3, staves = modules.normalization(image_2, staves, 10)
 
-# 객체 검출 과정
+# 4. 객체 검출 과정
 image_4, objects = modules.object_detection(image_3, staves)
 # for obj in objects:
 #     print(
@@ -27,7 +27,7 @@ image_4, objects = modules.object_detection(image_3, staves)
 #         ")]"
 #     )
 
-# 객체 분석 과정
+# 5. 객체 분석 과정
 image_5, objects = modules.object_analysis(image_4, objects)
 # for obj in objects:
 #     print(
@@ -41,11 +41,11 @@ image_5, objects = modules.object_analysis(image_4, objects)
 #         "]"
 #     )
 
-# 객체 인식 과정
+# 6. 객체 인식 과정
 image_6 = modules.recognition(image_5, staves, objects)
 
 # 이미지 띄우기
-cv2.imshow('image', image_6)
+cv2.imshow('image', image_4)
 k = cv2.waitKey(0)
 if k == 27:
     cv2.destroyAllWindows()
