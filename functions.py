@@ -33,15 +33,15 @@ def get_center(rect):
 
 def get_line(image, axis, axis_value, line, length):
     pixels = 0
-    for opposite_axis_value in range(line[0], line[1]):
-        point = (axis_value, opposite_axis_value) if axis else (opposite_axis_value, axis_value)
+    points = [(axis_value, x) for x in range(line[0], line[1])] if axis else [(x, axis_value) for x in range(line[0], line[1])]
+    for point in points:
         pixels += (image[point[0]][point[1]] == 255)
         if image[point[0] + 1][point[1]] == 0:
             if pixels > w(length):
                 break
             else:
                 pixels = 0
-    return opposite_axis_value, pixels
+    return point[1] if axis else point[0], pixels
 
 
 def count_rect_pixels(image, rect):

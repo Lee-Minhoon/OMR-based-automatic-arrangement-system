@@ -68,6 +68,7 @@ def recognize_note(image, staves, rect, stems, stem_direction):
                 for condition in note_conditions:
                     if condition[0]:
                         note = condition[1]
+                        break
 
                 if note:  # 음표로 분류됨
                     notes.append(note)
