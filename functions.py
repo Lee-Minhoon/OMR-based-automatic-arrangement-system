@@ -1,5 +1,5 @@
+# functions.py
 import cv2
-import numpy as np
 
 
 def threshold(image):
@@ -16,19 +16,13 @@ def detect_objects(image):
     return objects
 
 
-def dilate(image):
-    kernel = np.ones((w(15), w(15)), np.uint8)
-    image = cv2.dilate(image, kernel)
-    return image
-
-
 def put_text(image, text, loc):
     font = cv2.FONT_HERSHEY_SIMPLEX
     cv2.putText(image, str(text), loc, font, 0.8, (255, 0, 0), 2)
 
 
-def get_center(rect):
-    return (rect[1] + rect[1] + rect[3]) / 2
+def get_center(y, h):
+    return (y + y + h) / 2
 
 
 def get_line(image, axis, axis_value, line, length):
@@ -41,7 +35,7 @@ def get_line(image, axis, axis_value, line, length):
                 break
             else:
                 pixels = 0
-    return point[1] if axis else point[0], pixels
+    return point[1] if axis else point[0], pixels - 1
 
 
 def count_rect_pixels(image, rect):
@@ -53,10 +47,11 @@ def count_rect_pixels(image, rect):
     return pixels
 
 
-def stem_detection(image, rect, length):
+def stem_detection(image, stats, length):
+    x, y, width, height, area = stats
     stems = []
-    for col in range(rect[0], rect[0] + rect[2]):
-        row_range = (rect[1], rect[1] + rect[3])
+    for col in range(x, x + width):
+        row_range = (y, y + height)
         row, pixels = get_line(image, False, col, row_range, length)
         if pixels > w(length):
             if len(stems) == 0 or abs(stems[-1][0] + stems[-1][2] - col) > 1:
@@ -66,6 +61,6 @@ def stem_detection(image, rect, length):
     return stems
 
 
-def w(value):
+def weighted(value):
     standard = 10
-    return int(value * (standard / 20))
+    return int(value * (standard / 10))

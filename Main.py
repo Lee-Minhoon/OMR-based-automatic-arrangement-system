@@ -1,10 +1,11 @@
+# Main.py
 import cv2
 import os
 import modules
 
-# 악보 이미지 로드
+# 이미지 불러오기
 resource_path = os.getcwd() + "/resource/"
-image_0 = cv2.imread(resource_path + "nmusic15.jpg")  # 15
+image_0 = cv2.imread(resource_path + "music.jpg")  # 15
 
 # 1. 보표 영역 추출 및 그 외 노이즈 제거
 image_1 = modules.remove_noise(image_0)
@@ -42,7 +43,7 @@ image_5, objects = modules.object_analysis(image_4, objects)
 #     )
 
 # 6. 객체 인식 과정
-image_6 = modules.recognition(image_5, staves, objects)
+image_6, key, beats, pitches = modules.recognition(image_5, staves, objects)
 
 # 이미지 띄우기
 cv2.imshow('image', image_4)

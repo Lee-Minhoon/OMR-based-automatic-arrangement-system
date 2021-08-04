@@ -1,3 +1,4 @@
+# modules.py
 import cv2
 import numpy as np
 import functions as fs
@@ -17,12 +18,13 @@ import recognition_modules as rs
 # ======================================================================================================================
 def remove_noise(image):
     image = fs.threshold(image)  # 이미지 이진화
-    objects = fs.detect_objects(image)  # 모든 객체 검출하기
     mask = np.zeros(image.shape, np.uint8)  # 보표 영역만 추출하기 위해 마스크 생성
 
-    for obj in objects:
-        if obj[2] >= image.shape[1] * 0.5:  # 객체의 넓이가 이미지 넓이의 50% 이상이면
-            cv2.rectangle(mask, obj, (255, 0, 0), -1)  # 보표 영역으로 판단함 (마스킹)
+    cnt, labels, stats, centroids = cv2.connectedComponentsWithStats(image)  # 레이블링
+    for i in range(1, cnt):
+        x, y, width, height, area = stats[i]
+        if width > image.shape[1] * 0.5:  # 보표 영역에만
+            cv2.rectangle(mask, (x, y, width, height), (255, 0, 0), -1)  # 사각형 그리기
 
     masked_image = cv2.bitwise_and(image, mask)  # 보표 영역 추출
 
@@ -48,8 +50,8 @@ def remove_staves(image):
     for row in range(height):
         pixels = 0
         for col in range(width):
-            pixels += (image[row][col] == 255)  # 한 행에 존재하는 픽셀의 개수를 셈
-        if pixels >= width * 0.5:  # 픽셀의 개수가 이미지 넓이의 50% 이상이면
+            pixels += (image[row][col] == 255)  # 한 행에 존재하는 흰색 픽셀의 개수를 셈
+        if pixels >= width * 0.5:  # 이미지 넓이의 50% 이상이라면
             if len(staves) == 0 or abs(staves[-1][0] + staves[-1][1] - row) > 1:  # 첫 오선이거나 이전에 검출된 오선과 다른 오선
                 staves.append([row, 0])  # 오선 추가 [오선의 y 좌표][오선 높이]
             else:  # 이전에 검출된 오선과 같은 오선
@@ -115,34 +117,23 @@ def normalization(image, staves, standard):
 '''
 # ======================================================================================================================
 def object_detection(image, staves):
-    dilated_image = fs.dilate(image)  # 이미지 팽창 연산 (같은 객체임에도 분리되어 검출되는 것을 방지)
-    objects = fs.detect_objects(dilated_image)  # 팽창 연산한 이미지에서 객체 검출
     lines = int(len(staves) / 5)  # 보표의 개수
-    mask = np.zeros(image.shape, np.uint8)  # 구성요소로 분류된 객체 영역만 추출하기 위해 마스크 생성
-    components = []  # 구성요소 정보가 저장될 리스트
+    objects = []  # 구성요소 정보가 저장될 리스트
 
-    for obj in objects:
-        if obj[2] >= fs.w(26) and obj[3] >= fs.w(24):  # 악보의 구성요소가 되기 위한 넓이, 높이 조건
-            center = fs.get_center(obj)  # 객체의 중간 y 좌표
+    cnt, labels, stats, centroids = cv2.connectedComponentsWithStats(image)  # 모든 객체 검출하기
+    for i in range(1, cnt):
+        (x, y, w, h, area) = stats[i]
+        if w >= fs.w(5) and h >= fs.w(5):  # 악보의 구성요소가 되기 위한 넓이, 높이 조건
+            center = fs.get_center(y, h)
             for line in range(lines):
-                note_conditions = (
-                    obj[2] >= fs.w(35) and  # 넓이 조건
-                    obj[3] >= fs.w(80) or fs.w(30) >= obj[3] >= fs.w(20)  # 높이 조건
-                )
-                if note_conditions:
-                    area_top = staves[line * 5] - fs.w(20)  # 음표의 위치 조건 (상단)
-                    area_bot = staves[(line + 1) * 5 - 1] + fs.w(20)  # 음표의 위치 조건 (하단)
-                else:
-                    area_top = staves[line * 5]  # 나머지 구성 요소(쉼표, 조표 등)의 위치 조건 (상단)
-                    area_bot = staves[(line + 1) * 5 - 1]  # 나머지 구성 요소(쉼표, 조표 등)의 위치 조건 (하단)
-                if area_top <= center <= area_bot:  # 위치 조건이 만족되면 악보의 구성요소로 판단
-                    cv2.rectangle(mask, obj, (255, 0, 0), -1)  # 마스킹
-                    components.append([line, obj])  # 객체 리스트에 보표 번호와 객체의 정보(위치, 크기)를 추가
+                area_top = staves[line * 5] - fs.w(20)  # 위치 조건 (상단)
+                area_bot = staves[(line + 1) * 5 - 1] + fs.w(20)  # 위치 조건 (하단)
+                if area_top <= center <= area_bot:
+                    objects.append([line, (x, y, w, h, area)])  # 객체 리스트에 보표 번호와 객체의 정보(위치, 크기)를 추가
 
-    masked_image = cv2.bitwise_and(image, mask)  # 객체 영역 추출
-    components.sort()  # 보표 번호 → x 좌표 순으로 오름차순 정렬
+    objects.sort()  # 보표 번호 → x 좌표 순으로 오름차순 정렬
 
-    return masked_image, components
+    return image, objects
 
 
 # 5. 객체 분석 과정
@@ -160,20 +151,20 @@ def object_detection(image, staves):
 - 구성요소 리스트(components) : [[보표 번호, [객체], [직선 리스트], [음표 방향]] ... ]
 '''
 # ======================================================================================================================
-def object_analysis(image, components):
-    for comp in components:
-        rect = comp[1]
-        stems = fs.stem_detection(image, rect, 60)  # 객체 내의 모든 직선들을 검출함
+def object_analysis(image, objects):
+    for obj in objects:
+        stats = obj[1]
+        stems = fs.stem_detection(image, stats, 60)  # 객체 내의 모든 직선들을 검출함
         direction = None
         if len(stems) > 0:  # 직선이 1개 이상 존재함
-            if stems[0][0] - rect[0] >= fs.w(10):  # 직선이 나중에 발견 되면
+            if stems[0][0] - stats[0] >= fs.w(5):  # 직선이 나중에 발견 되면
                 direction = True  # 정 방향 음표
             else:  # 직선이 일찍 발견 되면
                 direction = False  # 역 방향 음표
-        comp.append(stems)  # 객체 리스트에 직선 리스트를 추가
-        comp.append(direction)  # 객체 리스트에 음표 방향을 추가
+        obj.append(stems)  # 객체 리스트에 직선 리스트를 추가
+        obj.append(direction)  # 객체 리스트에 음표 방향을 추가
 
-    return image, components
+    return image, objects
 
 
 # 6. 객체 인식 과정
@@ -201,8 +192,9 @@ def recognition(image, staves, components):
         else:  # 조표가 아니라면 음표 또는 쉼표
             notes, pitch = rs.recognize_note(image, comp_staves, rect, stems, stem_direction)
             if len(notes):  # 음표로 인식 되었다면
-                beats.append(notes)
-                pitches.append(pitch)
+                for j in range(len(notes)):
+                    beats.append(notes[j])
+                    pitches.append(pitch[j])
             else:  # 음표로 인식 되지 않았다면
                 rest, pitch = rs.recognize_rest(image, comp_staves, rect)
                 if rest:  # 쉼표로 인식 되었다면
@@ -211,9 +203,5 @@ def recognition(image, staves, components):
 
         cv2.rectangle(image, rect, (255, 0, 0), 1)
         fs.put_text(image, i, (rect[0], rect[1] - fs.w(20)))
-
-    print(key)
-    print(beats)
-    print(pitches)
 
     return image, key, beats, pitches
