@@ -123,11 +123,11 @@ def object_detection(image, staves):
     cnt, labels, stats, centroids = cv2.connectedComponentsWithStats(image)  # 모든 객체 검출하기
     for i in range(1, cnt):
         (x, y, w, h, area) = stats[i]
-        if w >= fs.w(5) and h >= fs.w(5):  # 악보의 구성요소가 되기 위한 넓이, 높이 조건
+        if w >= fs.weighted(5) and h >= fs.weighted(5):  # 악보의 구성요소가 되기 위한 넓이, 높이 조건
             center = fs.get_center(y, h)
             for line in range(lines):
-                area_top = staves[line * 5] - fs.w(20)  # 위치 조건 (상단)
-                area_bot = staves[(line + 1) * 5 - 1] + fs.w(20)  # 위치 조건 (하단)
+                area_top = staves[line * 5] - fs.weighted(20)  # 위치 조건 (상단)
+                area_bot = staves[(line + 1) * 5 - 1] + fs.weighted(20)  # 위치 조건 (하단)
                 if area_top <= center <= area_bot:
                     objects.append([line, (x, y, w, h, area)])  # 객체 리스트에 보표 번호와 객체의 정보(위치, 크기)를 추가
 
@@ -154,12 +154,12 @@ def object_detection(image, staves):
 def object_analysis(image, objects):
     for obj in objects:
         stats = obj[1]
-        stems = fs.stem_detection(image, stats, 60)  # 객체 내의 모든 직선들을 검출함
+        stems = fs.stem_detection(image, stats, 30)  # 객체 내의 모든 직선들을 검출함
         direction = None
         if len(stems) > 0:  # 직선이 1개 이상 존재함
-            if stems[0][0] - stats[0] >= fs.w(5):  # 직선이 나중에 발견 되면
+            if stems[0][0] - stats[0] >= fs.weighted(5):  # 직선이 나중에 발견되면
                 direction = True  # 정 방향 음표
-            else:  # 직선이 일찍 발견 되면
+            else:  # 직선이 일찍 발견되면
                 direction = False  # 역 방향 음표
         obj.append(stems)  # 객체 리스트에 직선 리스트를 추가
         obj.append(direction)  # 객체 리스트에 음표 방향을 추가
@@ -176,32 +176,22 @@ def object_analysis(image, objects):
 - 구성요소 리스트(components) : [[보표 번호, [객체], [직선 리스트], [음표 방향]] ... ]
 '''
 # ======================================================================================================================
-def recognition(image, staves, components):
+def recognition(image, staves, objects):
+    key = 0
+    time_signature = False
     beats = []  # 박자 리스트
     pitches = []  # 음이름 리스트
 
-    for i in range(len(components)):
-        component = components[i]
-        line = component[0]
-        rect = component[1]
-        stems = component[2]
-        stem_direction = component[3]
-        comp_staves = staves[line * 5: (line + 1) * 5]
-        if i == 1:  # 구성요소가 첫번째라면 (해당 위치에는 조표 또는 박자가 위치함)
-            key = rs.recognize_key(image, comp_staves, rect)
-        else:  # 조표가 아니라면 음표 또는 쉼표
-            notes, pitch = rs.recognize_note(image, comp_staves, rect, stems, stem_direction)
-            if len(notes):  # 음표로 인식 되었다면
-                for j in range(len(notes)):
-                    beats.append(notes[j])
-                    pitches.append(pitch[j])
-            else:  # 음표로 인식 되지 않았다면
-                rest, pitch = rs.recognize_rest(image, comp_staves, rect)
-                if rest:  # 쉼표로 인식 되었다면
-                    beats.append(rest)
-                    pitches.append(pitch)
-
-        cv2.rectangle(image, rect, (255, 0, 0), 1)
-        fs.put_text(image, i, (rect[0], rect[1] - fs.w(20)))
+    for i in range(range(1, len(objects))):
+        obj = objects[i]
+        line = obj[0]
+        stats = obj[1]
+        stems = obj[2]
+        direction = obj[3]
+        staff = staves[line * 5: (line + 1) * 5]
+        if not time_signature:  # 조표가 완전히 탐색되지 않음 (아직 박자표를 찾지 못함)
+            key += rs.recognize_key(image, staff, stats)
+        else:  # 조표가 완전히 탐색되었음
+            pass
 
     return image, key, beats, pitches

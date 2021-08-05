@@ -1,3 +1,4 @@
+# recognition_modules.py
 import functions as fs
 
 # 1. 조표 인식 함수
@@ -9,19 +10,19 @@ import functions as fs
 4. 플랫과 샾은 처음 탐색되는 기둥(stem)의 y 좌표를 통해 분류할 수 있다.
 '''
 # ======================================================================================================================
-def recognize_key(image, staves, rect):
+def recognize_key(image, staves, stats):
+    x, w, y, h, area = stats
     ts_conditions = (
-        staves[0] + fs.w(5) >= rect[1] >= staves[0] - fs.w(10) and  # 상단 위치 조건
-        staves[4] + fs.w(10) >= rect[1] + rect[3] >= staves[4] - fs.w(5) and  # 하단 위치 조건
-        staves[2] + fs.w(5) >= fs.get_center(rect) >= staves[2] - fs.w(5) and  # 중단 위치 조건
-        fs.w(40) >= rect[2] >= fs.w(30) and  # 넓이 조건
-        fs.w(100) >= rect[3] >= fs.w(90) and  # 높이 조건
-        fs.count_rect_pixels(image, rect) > fs.w(450)  # 픽셀 조건
+        staves[0] + fs.weighted(5) >= y >= staves[0] - fs.weighted(5) and  # 상단 위치 조건
+        staves[4] + fs.weighted(5) >= y + h >= staves[4] - fs.weighted(5) and  # 하단 위치 조건
+        staves[2] + fs.w(5) >= fs.get_center(y, h) >= staves[2] - fs.w(5) and  # 중단 위치 조건
+        fs.weighted(10) >= w >= fs.weighted(14) and  # 넓이 조건
+        fs.weighted(35) >= h >= fs.weighted(45)  # 높이 조건
     )
     if ts_conditions:
-        key = 0
+        return True, 0
     else:  # 조표가 있을 경우 (다장조를 제외한 모든 조)
-        stems = fs.stem_detection(image, rect, 30)
+        stems = fs.stem_detection(image, stats, 30)
         flat_conditions = (
             staves[0] + fs.w(10) > stems[0][1] > staves[0] - fs.w(10) and  # 상단 위치 조건
             staves[3] > stems[0][1] + stems[0][3] > staves[2]  # 하단 위치 조건
@@ -30,7 +31,7 @@ def recognize_key(image, staves, rect):
             key = 10 + len(stems)
         else:  # 첫 직선의 위치가 샾이 처음 놓이게 되는 위치라면
             key = 20 + len(stems) / 2
-        fs.put_text(image, str(int(key)), (rect[0], rect[1] + rect[3] + fs.w(60)))
+        fs.put_text(image, str(int(key)), (stats[0], stats[1] + stats[3] + fs.w(60)))
 
     return key
 
