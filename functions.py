@@ -52,8 +52,7 @@ def count_rect_pixels(image, rect):
     pixels = 0
     for row in range(y, y + h):
         for col in range(x, x + w):
-            if image[row][col] == 255:
-                pixels += 1
+            pixels += (image[row][col] == 255)
     return pixels
 
 

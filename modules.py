@@ -199,7 +199,6 @@ def recognition(image, staves, objects):
             time_signature = ts
             key += temp_key
         else:  # 조표가 완전히 탐색되었음
-            print(i)
             rs.recognize_note(image, staff, stats, stems, direction)
 
         cv2.rectangle(image, (x, y, w, h), (255, 0, 0), 1)

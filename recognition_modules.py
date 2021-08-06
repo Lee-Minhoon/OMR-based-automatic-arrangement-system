@@ -1,5 +1,6 @@
 # recognition_modules.py
 import functions as fs
+import cv2
 
 # 1. 조표 인식 함수
 # ======================================================================================================================
@@ -55,6 +56,27 @@ def recognize_note(image, staff, stats, stems, direction):
             head_exist, head_fill = recognize_note_head(image, stem, direction)
             if head_exist:
                 tail_cnt = recognize_note_tail(image, i, stem, direction)
+                dot_exist = recognize_note_dot(image, stem, direction)
+                note_classification = (
+                    ((not head_fill and tail_cnt == 0 and not dot_exist), 2),
+                    ((not head_fill and tail_cnt == 0 and dot_exist), -2),
+                    ((head_fill and tail_cnt == 0 and not dot_exist), 4),
+                    ((head_fill and tail_cnt == 0 and dot_exist), -4),
+                    ((head_fill and tail_cnt == 1 and not dot_exist), 8),
+                    ((head_fill and tail_cnt == 1 and dot_exist), -8),
+                    ((head_fill and tail_cnt == 2 and not dot_exist), 16),
+                    ((head_fill and tail_cnt == 2 and dot_exist), -16)
+                )
+
+                note = 0
+                for j in range(len(note_classification)):
+                    if note_classification[j][0]:
+                        note = note_classification[j][1]
+                        break
+
+                if note:
+                    notes.append(note)
+                    fs.put_text(image, note, (stem[0] - fs.weighted(10), stem[1] + stem[3] + fs.weighted(20)))
 
     pass
 
@@ -126,14 +148,11 @@ def recognize_note_tail(image, index, stem, direction):
 
     flag = False
     for row in range(area_top, area_bot):
-        print(image[row][area_col])
         if not flag and image[row][area_col] == 255:
             flag = True
             cnt += 1
         elif flag and image[row][area_col] == 0:
             flag = False
-
-    fs.put_text(image, cnt, (x - fs.weighted(10), y + h + fs.weighted(20)))
 
     return cnt
 
@@ -146,32 +165,30 @@ def recognize_note_tail(image, index, stem, direction):
 3. 해당 부분을 탐색해 픽셀의 개수를 살펴보면 점이 존재하는지 알 수 있다.
 '''
 # ======================================================================================================================
-def recognize_note_dot(image, stem, stem_direction):
-    dot_area_top = stem[1] + stem[3] - fs.w(10)  # 음표 점을 탐색할 위치 (상단)
-    dot_area_bot = stem[1] + stem[3] + fs.w(10)  # 음표 점을 탐색할 위치 (하단)
-    if stem_direction:  # 정 방향 음표
-        dot_area_left = stem[0] + stem[2] + fs.w(5)  # 음표 점을 탐색할 위치 (좌측)
-        dot_area_right = stem[0] + stem[2] + fs.w(15)  # 음표 점을 탐색할 위치 (우측)
+def recognize_note_dot(image, stem, direction):
+    x, y, w, h = stem
+    if direction:  # 정 방향 음표
+        area_top = y + h - fs.weighted(10)  # 음표 점을 탐색할 위치 (상단)
+        area_bot = y + h  # 음표 점을 탐색할 위치 (하단)
+        area_left = x + w + fs.weighted(2)  # 음표 점을 탐색할 위치 (좌측)
+        area_right = x + w + fs.weighted(10)  # 음표 점을 탐색할 위치 (우측)
     else:  # 역 방향 음표
-        dot_area_left = stem[0] + stem[2] + fs.w(30)  # 음표 점을 탐색할 위치 (좌측)
-        dot_area_right = stem[0] + stem[2] + fs.w(40)  # 음표 점을 탐색할 위치 (우측)
+        area_top = y - fs.weighted(5)  # 음표 점을 탐색할 위치 (상단)
+        area_bot = y + fs.weighted(5)  # 음표 점을 탐색할 위치 (하단)
+        area_left = x + w + fs.weighted(14)  # 음표 점을 탐색할 위치 (좌측)
+        area_right = x + w + fs.weighted(24)  # 음표 점을 탐색할 위치 (우측)
     dot_rect = (
-        dot_area_left,
-        dot_area_top,
-        dot_area_right - dot_area_left,
-        dot_area_bot - dot_area_top
+        area_left,
+        area_top,
+        area_right - area_left,
+        area_bot - area_top
     )
 
     pixels = fs.count_rect_pixels(image, dot_rect)
-
-    if pixels < fs.w(14):  # 점이 발견되지 않음
-        dot_exist = 0
-    elif pixels < fs.w(40):  # 점이 발견됨
-        dot_exist = 1
-    else:  # 점으로 분류할 수 없음
-        dot_exist = -1
-
-    return dot_exist
+    if pixels >= 15:
+        return True
+    else:
+        return False
 
 
 # 2-4. 음 높낮이 인식 함수

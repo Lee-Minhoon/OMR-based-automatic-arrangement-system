@@ -28,7 +28,7 @@ image_5, objects = modules.object_analysis(image_4, objects)
 image_6, key, beats, pitches = modules.recognition(image_5, staves, objects)
 
 # 이미지 띄우기
-cv2.imshow('image', image_4)
+cv2.imshow('image', image_6)
 k = cv2.waitKey(0)
 if k == 27:
     cv2.destroyAllWindows()
