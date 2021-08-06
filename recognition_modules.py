@@ -65,7 +65,9 @@ def recognize_note(image, staff, stats, stems, direction):
                     ((head_fill and tail_cnt == 1 and not dot_exist), 8),
                     ((head_fill and tail_cnt == 1 and dot_exist), -8),
                     ((head_fill and tail_cnt == 2 and not dot_exist), 16),
-                    ((head_fill and tail_cnt == 2 and dot_exist), -16)
+                    ((head_fill and tail_cnt == 2 and dot_exist), -16),
+                    ((head_fill and tail_cnt == 3 and not dot_exist), 32),
+                    ((head_fill and tail_cnt == 3 and dot_exist), -32)
                 )
 
                 note = 0
@@ -76,9 +78,10 @@ def recognize_note(image, staff, stats, stems, direction):
 
                 if note:
                     notes.append(note)
+                    pitches.append(recognize_pitch(image, staff, stem, direction))
                     fs.put_text(image, note, (stem[0] - fs.weighted(10), stem[1] + stem[3] + fs.weighted(20)))
 
-    pass
+    return notes, pitches
 
 
 # 2-1. 음표 머리 인식 함수
@@ -131,23 +134,24 @@ def recognize_note_tail(image, index, stem, direction):
     x, y, w, h = stem
     if direction:  # 정 방향 음표
         area_top = y  # 음표 꼬리를 탐색할 위치 (상단)
-        area_bot = y + h - fs.weighted(10)  # 음표 꼬리를 탐색할 위치 (하단)
+        area_bot = y + h - fs.weighted(15)  # 음표 꼬리를 탐색할 위치 (하단)
         area_left = x + w  # 음표 꼬리를 탐색할 위치 (좌측)
         area_right = x + w + fs.weighted(10)  # 음표 꼬리를 탐색할 위치 (우측)
     else:  # 역 방향 음표
-        area_top = y + fs.weighted(10)  # 음표 꼬리를 탐색할 위치 (상단)
+        area_top = y + fs.weighted(15)  # 음표 꼬리를 탐색할 위치 (상단)
         area_bot = y + h  # 음표 꼬리를 탐색할 위치 (하단)
         area_left = x + w  # 음표 꼬리를 탐색할 위치 (좌측)
         area_right = x + w + fs.weighted(10)  # 음표 꼬리를 탐색할 위치 (우측)
     if index:
-        area_col = x - fs.weighted(3)  # 음표 꼬리를 탐색할 위치 (열)
+        area_col = x - fs.weighted(4)  # 음표 꼬리를 탐색할 위치 (열)
     else:
-        area_col = x + w + fs.weighted(3)  # 음표 꼬리를 탐색할 위치 (열)
+        area_col = x + w + fs.weighted(4)  # 음표 꼬리를 탐색할 위치 (열)
 
     cnt = 0
 
     flag = False
     for row in range(area_top, area_bot):
+        print(image[row][area_col])
         if not flag and image[row][area_col] == 255:
             flag = True
             cnt += 1
@@ -185,7 +189,8 @@ def recognize_note_dot(image, stem, direction):
     )
 
     pixels = fs.count_rect_pixels(image, dot_rect)
-    if pixels >= 15:
+    cv2.rectangle(image, dot_rect, (255, 0, 0), 1)
+    if pixels >= 13:
         return True
     else:
         return False
@@ -198,17 +203,15 @@ def recognize_note_dot(image, stem, direction):
 2. 정 방향 음표의 경우 음표 기둥의 하단, 역 방향 음표의 경우 음표 기둥의 상단이 음표 머리의 중단 y 좌표이다.
 '''
 # ======================================================================================================================
-def recognize_pitch(image, staves, stem, stem_direction):
-    if stem_direction:  # 정 방향 음표
-        head_center = stem[1] + stem[3]
-    else:  # 역 방향 음표
-        head_center = stem[1]
+def recognize_pitch(image, staff, stem, direction):
+    x, y, w, h = stem
+    head_center = y + h if direction else y
 
-    pitch_lines = [staves[4] + fs.w(60) - fs.w(10) * i for i in range(21)]
+    pitch_lines = [staff[4] + fs.weighted(30) - fs.weighted(5) * i for i in range(21)]
 
     for i in range(len(pitch_lines)):
         line = pitch_lines[i]
-        if line + fs.w(7) >= head_center >= line - fs.w(7):
+        if line + fs.weighted(3) >= head_center >= line - fs.weighted(3):
             return i
 
 
@@ -219,29 +222,13 @@ def recognize_pitch(image, staves, stem, stem_direction):
 2. 픽셀의 개수 등 다양한 조건을 추가해 좀 더 엄격하게 탐색할 수 있다.
 '''
 # ======================================================================================================================
-def recognize_rest(image, staves, rect):
-    rest = 0
-    center = (rect[1] + rect[1] + rect[3]) / 2  # 객체의 중간 y 좌표
-    rest_condition = staves[3] > center > staves[1]
-    if rest_condition:
-        # fs.put_text(image, fs.count_rect_pixels(image, rect), (rect[0], rect[1] + rect[3] + fs.w(60)))
-        # fs.put_text(image, rect[3], (rect[0], rect[1] + rect[3] + fs.w(60)))
-        # fs.put_text(image, rect[2], (rect[0], rect[1] + rect[3] + fs.w(60)))
-        if fs.w(30) >= rect[2] >= fs.w(25) and fs.w(20) >= rect[3] >= fs.w(14):  # 온쉼표와 2분쉼표의 넓이, 높이 조건
-            if fs.w(470) >= fs.count_rect_pixels(image, rect) >= fs.w(370):  # 온쉼표와 2분쉼표의 픽셀 개수 조건
-                whole_rest_condition = staves[1] + fs.w(10) >= center >= staves[1]
-                half_rest_condition = staves[2] >= center >= staves[1] + fs.w(10)
-            if whole_rest_condition:
-                rest = 1
-            if half_rest_condition:
-                rest = 2
-        elif fs.w(35) >= rect[2] >= fs.w(25) and fs.w(75) >= rect[3] >= fs.w(60):  # 4분쉼표의 넓이, 높이 조건
-            if fs.w(320) >= fs.count_rect_pixels(image, rect) >= fs.w(240):  # 4분쉼표의 픽셀 개수 조건
-                rest = 4
-        elif fs.w(35) >= rect[2] >= fs.w(25) and fs.w(60) >= rect[3] >= fs.w(40):
-            if fs.w(150) >= fs.count_rect_pixels(image, rect) >= fs.w(90):
-                rest = 8
-    if rest:
-        fs.put_text(image, "r" + str(rest), (rect[0], rect[1] + rect[3] + fs.w(60)))
+def recognize_rest(image, staff, stats):
+    x, y, w, h, area = stats
+    center = fs.get_center(y, h)
+    rest_condition = staff[3] > center > staff[1]
+    # if rest_condition:
+        # fs.put_text(image, w, (x, y + h + fs.weighted(20)))
+        # fs.put_text(image, h, (x, y + h + fs.weighted(50)))
+        # fs.put_text(image, fs.count_rect_pixels(image, (x, y, w, h)), (x, y + h + fs.weighted(80)))
 
-    return rest, -1
+    pass

@@ -167,6 +167,7 @@ def object_analysis(image, objects):
                 direction = False  # 역 방향 음표
         obj.append(stems)  # 객체 리스트에 직선 리스트를 추가
         obj.append(direction)  # 객체 리스트에 음표 방향을 추가
+        fs.put_text(image, len(stems), (stats[0], stats[1] + stats[3] + fs.weighted(50)))
 
     return image, objects
 
@@ -187,6 +188,7 @@ def recognition(image, staves, objects):
     pitches = []  # 음이름 리스트
 
     for i in range(1, len(objects) - 1):
+        print(i)
         obj = objects[i]
         line = obj[0]
         stats = obj[1]
@@ -199,7 +201,14 @@ def recognition(image, staves, objects):
             time_signature = ts
             key += temp_key
         else:  # 조표가 완전히 탐색되었음
-            rs.recognize_note(image, staff, stats, stems, direction)
+            notes = rs.recognize_note(image, staff, stats, stems, direction)
+            if len(notes[0]):
+                for beat in notes[0]:
+                    beats.append(beat)
+                for pitch in notes[1]:
+                    pitches.append(pitch)
+            else:
+                rs.recognize_rest(image, staff, stats)
 
         cv2.rectangle(image, (x, y, w, h), (255, 0, 0), 1)
         fs.put_text(image, i, (x, y - fs.weighted(20)))

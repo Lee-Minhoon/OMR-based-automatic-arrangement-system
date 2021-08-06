@@ -10,7 +10,7 @@ def threshold(image):
 
 
 def closing(image):
-    kernel = np.ones((weighted(5), weighted(5)), np.uint8)
+    kernel = np.ones((weighted(7), weighted(7)), np.uint8)
     image = cv2.morphologyEx(image, cv2.MORPH_CLOSE, kernel)
     return image
 
@@ -25,7 +25,7 @@ def detect_objects(image):
 
 def put_text(image, text, loc):
     font = cv2.FONT_HERSHEY_SIMPLEX
-    cv2.putText(image, str(text), loc, font, 0.8, (255, 0, 0), 2)
+    cv2.putText(image, str(text), loc, font, 0.5, (255, 0, 0), 2)
 
 
 def get_center(y, h):
