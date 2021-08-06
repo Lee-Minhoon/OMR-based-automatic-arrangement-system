@@ -22,9 +22,9 @@ def remove_noise(image):
 
     cnt, labels, stats, centroids = cv2.connectedComponentsWithStats(image)  # 레이블링
     for i in range(1, cnt):
-        x, y, width, height, area = stats[i]
-        if width > image.shape[1] * 0.5:  # 보표 영역에만
-            cv2.rectangle(mask, (x, y, width, height), (255, 0, 0), -1)  # 사각형 그리기
+        x, y, w, h, area = stats[i]
+        if w > image.shape[1] * 0.5:  # 보표 영역에만
+            cv2.rectangle(mask, (x, y, w, h), (255, 0, 0), -1)  # 마스킹
 
     masked_image = cv2.bitwise_and(image, mask)  # 보표 영역 추출
 
@@ -87,7 +87,7 @@ def normalization(image, staves, standard):
         for staff in range(4):
             staff_above = staves[line * 5 + staff]
             staff_below = staves[line * 5 + staff + 1]
-            avg_distance += abs(staff_above - staff_below)  # 오선의 간격을 누적해서 더 해줌
+            avg_distance += abs(staff_above - staff_below)  # 오선의 간격을 누적해서 더해줌
     avg_distance /= len(staves) - lines  # 오선 간의 평균 간격
 
     height, width = image.shape  # 이미지의 높이와 넓이
@@ -119,8 +119,10 @@ def normalization(image, staves, standard):
 def object_detection(image, staves):
     lines = int(len(staves) / 5)  # 보표의 개수
     objects = []  # 구성요소 정보가 저장될 리스트
+    mask = np.zeros(image.shape, np.uint8)  # 보표 영역만 추출하기 위해 마스크 생성
 
-    cnt, labels, stats, centroids = cv2.connectedComponentsWithStats(image)  # 모든 객체 검출하기
+    closing_image = fs.closing(image)
+    cnt, labels, stats, centroids = cv2.connectedComponentsWithStats(closing_image)  # 모든 객체 검출하기
     for i in range(1, cnt):
         (x, y, w, h, area) = stats[i]
         if w >= fs.weighted(5) and h >= fs.weighted(5):  # 악보의 구성요소가 되기 위한 넓이, 높이 조건
@@ -129,11 +131,13 @@ def object_detection(image, staves):
                 area_top = staves[line * 5] - fs.weighted(20)  # 위치 조건 (상단)
                 area_bot = staves[(line + 1) * 5 - 1] + fs.weighted(20)  # 위치 조건 (하단)
                 if area_top <= center <= area_bot:
+                    cv2.rectangle(mask, (x, y, w, h), (255, 0, 0), -1)  # 마스킹
                     objects.append([line, (x, y, w, h, area)])  # 객체 리스트에 보표 번호와 객체의 정보(위치, 크기)를 추가
 
+    masked_image = cv2.bitwise_and(image, mask)  # 객체 영역 추출
     objects.sort()  # 보표 번호 → x 좌표 순으로 오름차순 정렬
 
-    return image, objects
+    return masked_image, objects
 
 
 # 5. 객체 분석 과정
@@ -182,16 +186,23 @@ def recognition(image, staves, objects):
     beats = []  # 박자 리스트
     pitches = []  # 음이름 리스트
 
-    for i in range(range(1, len(objects))):
+    for i in range(1, len(objects) - 1):
         obj = objects[i]
         line = obj[0]
         stats = obj[1]
         stems = obj[2]
         direction = obj[3]
+        x, y, w, h, area = stats
         staff = staves[line * 5: (line + 1) * 5]
         if not time_signature:  # 조표가 완전히 탐색되지 않음 (아직 박자표를 찾지 못함)
-            key += rs.recognize_key(image, staff, stats)
+            ts, temp_key = rs.recognize_key(image, staff, stats)
+            time_signature = ts
+            key += temp_key
         else:  # 조표가 완전히 탐색되었음
-            pass
+            print(i)
+            rs.recognize_note(image, staff, stats, stems, direction)
+
+        cv2.rectangle(image, (x, y, w, h), (255, 0, 0), 1)
+        fs.put_text(image, i, (x, y - fs.weighted(20)))
 
     return image, key, beats, pitches

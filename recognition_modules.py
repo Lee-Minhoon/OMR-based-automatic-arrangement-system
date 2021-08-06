@@ -11,29 +11,24 @@ import functions as fs
 '''
 # ======================================================================================================================
 def recognize_key(image, staves, stats):
-    x, w, y, h, area = stats
+    x, y, w, h, area = stats
     ts_conditions = (
         staves[0] + fs.weighted(5) >= y >= staves[0] - fs.weighted(5) and  # 상단 위치 조건
         staves[4] + fs.weighted(5) >= y + h >= staves[4] - fs.weighted(5) and  # 하단 위치 조건
-        staves[2] + fs.w(5) >= fs.get_center(y, h) >= staves[2] - fs.w(5) and  # 중단 위치 조건
-        fs.weighted(10) >= w >= fs.weighted(14) and  # 넓이 조건
-        fs.weighted(35) >= h >= fs.weighted(45)  # 높이 조건
+        staves[2] + fs.weighted(5) >= fs.get_center(y, h) >= staves[2] - fs.weighted(5) and  # 중단 위치 조건
+        fs.weighted(18) >= w >= fs.weighted(10) and  # 넓이 조건
+        fs.weighted(45) >= h >= fs.weighted(35)  # 높이 조건
     )
     if ts_conditions:
         return True, 0
     else:  # 조표가 있을 경우 (다장조를 제외한 모든 조)
-        stems = fs.stem_detection(image, stats, 30)
-        flat_conditions = (
-            staves[0] + fs.w(10) > stems[0][1] > staves[0] - fs.w(10) and  # 상단 위치 조건
-            staves[3] > stems[0][1] + stems[0][3] > staves[2]  # 하단 위치 조건
-        )
-        if flat_conditions:  # 첫 직선의 위치가 플랫이 처음 놓이게 되는 위치라면
-            key = 10 + len(stems)
-        else:  # 첫 직선의 위치가 샾이 처음 놓이게 되는 위치라면
-            key = 20 + len(stems) / 2
-        fs.put_text(image, str(int(key)), (stats[0], stats[1] + stats[3] + fs.w(60)))
+        stems = fs.stem_detection(image, stats, 20)
+        if stems[0][0] - x >= fs.weighted(3):  # 직선이 나중에 발견되면
+            key = int(10 * len(stems) / 2)  # 샾
+        else:  # 직선이 일찍 발견되면
+            key = 100 * len(stems)  # 플랫
 
-    return key
+    return False, key
 
 
 # 2. 음표 인식 함수
@@ -44,39 +39,24 @@ def recognize_key(image, staves, stats):
 3. 각 머리(head), 기둥(stem), 꼬리(tail), 점(dot)이다.
 '''
 # ======================================================================================================================
-def recognize_note(image, staves, rect, stems, stem_direction):
+def recognize_note(image, staff, stats, stems, direction):
+    x, y, w, h, area = stats
     notes = []
     pitches = []
-    if rect[2] > fs.w(20) and rect[3] > fs.w(60):  # 음표로 가정할 수 있는 최소 넓이, 높이 조건 (온 음표, 2분 음표 제외)
+    note_condition = (
+        len(stems) and
+        w >= fs.weighted(10) and  # 넓이 조건
+        h >= fs.weighted(35) and  # 높이 조건
+        area >= fs.weighted(95)  # 픽셀 갯수 조건
+    )
+    if note_condition:
         for i in range(len(stems)):
             stem = stems[i]
-            head_pixel, head_fill = recognize_note_head(image, stem, stem_direction)  # 음표 머리 픽셀, 채워져 있는지 여부
-            if head_pixel > fs.w(15):  # 음표 머리에 해당하는 부분이 있다고 판단되면
-                tail_cnt = recognize_note_tail(image, i, stem, stem_direction)  # 음표 꼬리 개수
-                dot_exist = recognize_note_dot(image, stem, stem_direction)  # 점 존재 여부
-                note_conditions = (
-                    ((not head_fill and tail_cnt == 0 and dot_exist == 0), 2),  # 2분음표
-                    ((not head_fill and tail_cnt == 0 and dot_exist == 1), -2),  # 점2분음표
-                    ((head_fill and tail_cnt == 0 and dot_exist == 0), 4),  # 4분음표
-                    ((head_fill and tail_cnt == 0 and dot_exist == 1), -4),  # 점4분음표
-                    ((head_fill and tail_cnt == 1 and dot_exist == 0), 8),  # 8분음표
-                    ((head_fill and tail_cnt == 1 and dot_exist == 1), -8),  # 점8분음표
-                    ((head_fill and tail_cnt == 2 and dot_exist == 0), 16),  # 16분음표
-                    ((head_fill and tail_cnt == 2 and dot_exist == 1), -16),  # 점16분음표
-                    (1, 0)
-                )
+            head_exist, head_fill = recognize_note_head(image, stem, direction)
+            if head_exist:
+                tail_cnt = recognize_note_tail(image, i, stem, direction)
 
-                for condition in note_conditions:
-                    if condition[0]:
-                        note = condition[1]
-                        break
-
-                if note:  # 음표로 분류됨
-                    notes.append(note)
-                    fs.put_text(image, note, (stem[0] - fs.w(20), stem[1] + stem[3] + fs.w(60)))
-                    pitches.append(recognize_pitch(image, staves, stem, stem_direction))
-
-    return notes, pitches
+    pass
 
 
 # 2-1. 음표 머리 인식 함수
@@ -87,44 +67,34 @@ def recognize_note(image, staves, rect, stems, stem_direction):
 3, 해당 부분을 히스토그램을 통해 탐색한다면 머리가 존재하는지, 존재한다면 채워져 있는지 비었는지 분류할 수 있다.
 '''
 # ======================================================================================================================
-def recognize_note_head(image, stem, stem_direction):
-    if stem_direction:  # 정 방향 음표
-        head_area_top = stem[1] + stem[3] - fs.w(20)  # 음표 머리를 탐색할 위치 (상단)
-        head_area_bot = stem[1] + stem[3] + fs.w(20)  # 음표 머리를 탐색할 위치 (하단)
-        head_area_left = stem[0] - fs.w(20)  # 음표 머리를 탐색할 위치 (좌측)
-        head_area_right = stem[0]  # 음표 머리를 탐색할 위치 (우측)
+def recognize_note_head(image, stem, direction):
+    x, y, w, h = stem
+    if direction:  # 정 방향 음표
+        area_top = y + h - fs.weighted(10)  # 음표 머리를 탐색할 위치 (상단)
+        area_bot = y + h + fs.weighted(10)  # 음표 머리를 탐색할 위치 (하단)
+        area_left = x - fs.weighted(10)  # 음표 머리를 탐색할 위치 (좌측)
+        area_right = x  # 음표 머리를 탐색할 위치 (우측)
     else:  # 역 방향 음표
-        head_area_top = stem[1] - fs.w(20)  # 음표 머리를 탐색할 위치 (상단)
-        head_area_bot = stem[1] + fs.w(20)  # 음표 머리를 탐색할 위치 (하단)
-        head_area_left = stem[0] + stem[2]  # 음표 머리를 탐색할 위치 (좌측)
-        head_area_right = stem[0] + stem[2] + fs.w(20)  # 음표 머리를 탐색할 위치 (우측)
+        area_top = y - fs.weighted(10)  # 음표 머리를 탐색할 위치 (상단)
+        area_bot = y + fs.weighted(10)  # 음표 머리를 탐색할 위치 (하단)
+        area_left = x + w  # 음표 머리를 탐색할 위치 (좌측)
+        area_right = x + w + fs.weighted(10)  # 음표 머리를 탐색할 위치 (우측)
 
-    head_pixel = 0  # head_pixel = 채워져있는 머리인지, 비어있는 머리인지 구분 짓지않고 픽셀의 개수를 셈
-    head_pixel_max = 0  # head_pixel_max = head_pixel 중 가장 큰 값
-    head_fill_pixel = 0  # head_fill_pixel = 끊기지 않고 이어져 있는 선의 픽셀 개수를 셈 (채워진 머리)
-    head_fill_pixel_max = 0  # head_fill_pixel_max = head_fill_pixel 중 가장 큰 값
+    cnt = 0  # cnt = 끊기지 않고 이어져 있는 선의 개수를 셈
+    cnt_max = 0  # cnt_max = cnt 중 가장 큰 값
+    pixel_cnt = fs.count_rect_pixels(image, (area_left, area_top, area_right - area_left, area_bot - area_top))
 
-    for row in range(head_area_top, head_area_bot):
-        pixels = 0
-        for col in range(head_area_left, head_area_right):
-            pixels += (image[row][col] == 255)
-        if pixels >= fs.w(10):
-            head_pixel += 1
-            head_pixel_max = max(head_pixel_max, pixels)
-        col_range = (head_area_left, head_area_right)
-        col, pixels = fs.get_line(image, True, row, col_range, 10)
-        if pixels >= fs.w(10):
-            head_fill_pixel += 1
-            head_fill_pixel_max = max(head_fill_pixel_max, pixels)
+    for row in range(area_top, area_bot):
+        col, pixels = fs.get_line(image, True, row, (area_left, area_right), 5)
+        pixels += 1
+        if pixels >= fs.weighted(5):
+            cnt += 1
+            cnt_max = max(cnt_max, pixels)
 
-    if head_fill_pixel < fs.w(10) and head_pixel_max < fs.w(10) and head_fill_pixel_max < fs.w(5):  # 머리가 비어있음
-        head_fill = 0
-    elif head_fill_pixel >= fs.w(10) and head_fill_pixel_max >= fs.w(20):  # 머리가 채워져있음
-        head_fill = 1
-    else:  # 머리로 분류할 수 없음
-        head_fill = -1
+    head_exist = (cnt >= 4)
+    head_fill = (cnt >= 8 and cnt_max >= 9 and pixel_cnt >= 80)
 
-    return head_pixel, head_fill
+    return head_exist, head_fill
 
 
 # 2-2. 음표 꼬리 인식 함수
@@ -135,32 +105,37 @@ def recognize_note_head(image, stem, stem_direction):
 3. 해당 부분을 히스토그램을 통해 탐색한다면 꼬리가 존재하는지, 존재한다면 몇개가 있는지 분류할 수 있다.
 '''
 # ======================================================================================================================
-def recognize_note_tail(image, index, stem, stem_direction):
-    if stem_direction:  # 정 방향 음표
-        tail_area_top = stem[1]  # 음표 꼬리를 탐색할 위치 (상단)
-        tail_area_bot = stem[1] + stem[3] - fs.w(20)  # 음표 꼬리를 탐색할 위치 (하단)
+def recognize_note_tail(image, index, stem, direction):
+    x, y, w, h = stem
+    if direction:  # 정 방향 음표
+        area_top = y  # 음표 꼬리를 탐색할 위치 (상단)
+        area_bot = y + h - fs.weighted(10)  # 음표 꼬리를 탐색할 위치 (하단)
+        area_left = x + w  # 음표 꼬리를 탐색할 위치 (좌측)
+        area_right = x + w + fs.weighted(10)  # 음표 꼬리를 탐색할 위치 (우측)
     else:  # 역 방향 음표
-        tail_area_top = stem[1] + fs.w(20)  # 음표 꼬리를 탐색할 위치 (상단)
-        tail_area_bot = stem[1] + stem[3]  # 음표 꼬리를 탐색할 위치 (하단)
+        area_top = y + fs.weighted(10)  # 음표 꼬리를 탐색할 위치 (상단)
+        area_bot = y + h  # 음표 꼬리를 탐색할 위치 (하단)
+        area_left = x + w  # 음표 꼬리를 탐색할 위치 (좌측)
+        area_right = x + w + fs.weighted(10)  # 음표 꼬리를 탐색할 위치 (우측)
     if index:
-        tail_area_col = stem[0] - fs.w(7)  # 음표 꼬리를 탐색할 위치 (열)
+        area_col = x - fs.weighted(3)  # 음표 꼬리를 탐색할 위치 (열)
     else:
-        tail_area_col = stem[0] + stem[2] + fs.w(7)  # 음표 꼬리를 탐색할 위치 (열)
+        area_col = x + w + fs.weighted(3)  # 음표 꼬리를 탐색할 위치 (열)
 
-    pixels = 0
-    for row in range(tail_area_top, tail_area_bot):
-        pixels += (image[row][tail_area_col] == 255)
+    cnt = 0
 
-    if pixels < fs.w(6):  # 꼬리가 발견되지 않음
-        tail_cnt = 0
-    elif pixels < fs.w(16):  # 꼬리 1개
-        tail_cnt = 1
-    elif pixels < fs.w(24):  # 꼬리 2개
-        tail_cnt = 2
-    else:  # 꼬리로 분류할 수 없음
-        tail_cnt = -1
+    flag = False
+    for row in range(area_top, area_bot):
+        print(image[row][area_col])
+        if not flag and image[row][area_col] == 255:
+            flag = True
+            cnt += 1
+        elif flag and image[row][area_col] == 0:
+            flag = False
 
-    return tail_cnt
+    fs.put_text(image, cnt, (x - fs.weighted(10), y + h + fs.weighted(20)))
+
+    return cnt
 
 
 # 2-3. 음표 점 인식 함수

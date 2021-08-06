@@ -1,10 +1,17 @@
 # functions.py
 import cv2
+import numpy as np
 
 
 def threshold(image):
     image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     ret, image = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+    return image
+
+
+def closing(image):
+    kernel = np.ones((weighted(5), weighted(5)), np.uint8)
+    image = cv2.morphologyEx(image, cv2.MORPH_CLOSE, kernel)
     return image
 
 
@@ -31,17 +38,20 @@ def get_line(image, axis, axis_value, line, length):
     for point in points:
         pixels += (image[point[0]][point[1]] == 255)
         if image[point[0] + 1][point[1]] == 0:
-            if pixels > weighted(length):
+            if pixels >= weighted(length):
                 break
             else:
                 pixels = 0
+    if pixels < weighted(length):
+        pixels = 0
     return point[1] if axis else point[0], pixels - 1
 
 
 def count_rect_pixels(image, rect):
+    x, y, w, h = rect
     pixels = 0
-    for row in range(rect[1], rect[1] + rect[3]):
-        for col in range(rect[0], rect[0] + rect[2]):
+    for row in range(y, y + h):
+        for col in range(x, x + w):
             if image[row][col] == 255:
                 pixels += 1
     return pixels
