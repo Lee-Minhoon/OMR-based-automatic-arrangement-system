@@ -24,10 +24,8 @@ def recognize_key(image, staves, stats):
         return True, 0
     else:  # 조표가 있을 경우 (다장조를 제외한 모든 조)
         stems = fs.stem_detection(image, stats, 20)
-        if stems[0][0] - x >= fs.weighted(3):  # 직선이 나중에 발견되면
-            key = int(10 * len(stems) / 2)  # 샾
-        else:  # 직선이 일찍 발견되면
-            key = 100 * len(stems)  # 플랫
+        print(stems)
+        key = 100 * len(stems)  # 플랫
 
     return False, key
 
@@ -56,7 +54,7 @@ def recognize_note(image, staff, stats, stems, direction):
             head_exist, head_fill = recognize_note_head(image, stem, direction)
             if head_exist:
                 tail_cnt = recognize_note_tail(image, i, stem, direction)
-                dot_exist = recognize_note_dot(image, stem, direction)
+                dot_exist = recognize_note_dot(image, stem, direction, len(stems), tail_cnt)
                 note_classification = (
                     ((not head_fill and tail_cnt == 0 and not dot_exist), 2),
                     ((not head_fill and tail_cnt == 0 and dot_exist), -2),
@@ -95,15 +93,15 @@ def recognize_note(image, staff, stats, stems, direction):
 def recognize_note_head(image, stem, direction):
     x, y, w, h = stem
     if direction:  # 정 방향 음표
-        area_top = y + h - fs.weighted(10)  # 음표 머리를 탐색할 위치 (상단)
-        area_bot = y + h + fs.weighted(10)  # 음표 머리를 탐색할 위치 (하단)
-        area_left = x - fs.weighted(10)  # 음표 머리를 탐색할 위치 (좌측)
+        area_top = y + h - fs.weighted(7)  # 음표 머리를 탐색할 위치 (상단)
+        area_bot = y + h + fs.weighted(7)  # 음표 머리를 탐색할 위치 (하단)
+        area_left = x - fs.weighted(14)  # 음표 머리를 탐색할 위치 (좌측)
         area_right = x  # 음표 머리를 탐색할 위치 (우측)
     else:  # 역 방향 음표
-        area_top = y - fs.weighted(10)  # 음표 머리를 탐색할 위치 (상단)
-        area_bot = y + fs.weighted(10)  # 음표 머리를 탐색할 위치 (하단)
+        area_top = y - fs.weighted(7)  # 음표 머리를 탐색할 위치 (상단)
+        area_bot = y + fs.weighted(7)  # 음표 머리를 탐색할 위치 (하단)
         area_left = x + w  # 음표 머리를 탐색할 위치 (좌측)
-        area_right = x + w + fs.weighted(10)  # 음표 머리를 탐색할 위치 (우측)
+        area_right = x + w + fs.weighted(14)  # 음표 머리를 탐색할 위치 (우측)
 
     cnt = 0  # cnt = 끊기지 않고 이어져 있는 선의 개수를 셈
     cnt_max = 0  # cnt_max = cnt 중 가장 큰 값
@@ -116,7 +114,7 @@ def recognize_note_head(image, stem, direction):
             cnt += 1
             cnt_max = max(cnt_max, pixels)
 
-    head_exist = (cnt >= 4)
+    head_exist = (cnt >= 3 and pixel_cnt >= 50)
     head_fill = (cnt >= 8 and cnt_max >= 9 and pixel_cnt >= 80)
 
     return head_exist, head_fill
@@ -135,28 +133,15 @@ def recognize_note_tail(image, index, stem, direction):
     if direction:  # 정 방향 음표
         area_top = y  # 음표 꼬리를 탐색할 위치 (상단)
         area_bot = y + h - fs.weighted(15)  # 음표 꼬리를 탐색할 위치 (하단)
-        area_left = x + w  # 음표 꼬리를 탐색할 위치 (좌측)
-        area_right = x + w + fs.weighted(10)  # 음표 꼬리를 탐색할 위치 (우측)
     else:  # 역 방향 음표
         area_top = y + fs.weighted(15)  # 음표 꼬리를 탐색할 위치 (상단)
         area_bot = y + h  # 음표 꼬리를 탐색할 위치 (하단)
-        area_left = x + w  # 음표 꼬리를 탐색할 위치 (좌측)
-        area_right = x + w + fs.weighted(10)  # 음표 꼬리를 탐색할 위치 (우측)
     if index:
         area_col = x - fs.weighted(4)  # 음표 꼬리를 탐색할 위치 (열)
     else:
         area_col = x + w + fs.weighted(4)  # 음표 꼬리를 탐색할 위치 (열)
 
-    cnt = 0
-
-    flag = False
-    for row in range(area_top, area_bot):
-        print(image[row][area_col])
-        if not flag and image[row][area_col] == 255:
-            flag = True
-            cnt += 1
-        elif flag and image[row][area_col] == 0:
-            flag = False
+    cnt = fs.count_pixels_part(image, area_top, area_bot, area_col)
 
     return cnt
 
@@ -169,15 +154,15 @@ def recognize_note_tail(image, index, stem, direction):
 3. 해당 부분을 탐색해 픽셀의 개수를 살펴보면 점이 존재하는지 알 수 있다.
 '''
 # ======================================================================================================================
-def recognize_note_dot(image, stem, direction):
+def recognize_note_dot(image, stem, direction, tail_cnt, stems_cnt):
     x, y, w, h = stem
     if direction:  # 정 방향 음표
         area_top = y + h - fs.weighted(10)  # 음표 점을 탐색할 위치 (상단)
-        area_bot = y + h  # 음표 점을 탐색할 위치 (하단)
+        area_bot = y + h + fs.weighted(5)  # 음표 점을 탐색할 위치 (하단)
         area_left = x + w + fs.weighted(2)  # 음표 점을 탐색할 위치 (좌측)
-        area_right = x + w + fs.weighted(10)  # 음표 점을 탐색할 위치 (우측)
+        area_right = x + w + fs.weighted(12)  # 음표 점을 탐색할 위치 (우측)
     else:  # 역 방향 음표
-        area_top = y - fs.weighted(5)  # 음표 점을 탐색할 위치 (상단)
+        area_top = y - fs.weighted(10)  # 음표 점을 탐색할 위치 (상단)
         area_bot = y + fs.weighted(5)  # 음표 점을 탐색할 위치 (하단)
         area_left = x + w + fs.weighted(14)  # 음표 점을 탐색할 위치 (좌측)
         area_right = x + w + fs.weighted(24)  # 음표 점을 탐색할 위치 (우측)
@@ -190,10 +175,12 @@ def recognize_note_dot(image, stem, direction):
 
     pixels = fs.count_rect_pixels(image, dot_rect)
     cv2.rectangle(image, dot_rect, (255, 0, 0), 1)
-    if pixels >= 13:
-        return True
+
+    threshold = (10, 15, 20, 30)
+    if direction and stems_cnt == 1:
+        return pixels >= fs.weighted(threshold[tail_cnt])
     else:
-        return False
+        return pixels >= fs.weighted(threshold[0])
 
 
 # 2-4. 음 높낮이 인식 함수
@@ -226,9 +213,43 @@ def recognize_rest(image, staff, stats):
     x, y, w, h, area = stats
     center = fs.get_center(y, h)
     rest_condition = staff[3] > center > staff[1]
-    # if rest_condition:
-        # fs.put_text(image, w, (x, y + h + fs.weighted(20)))
-        # fs.put_text(image, h, (x, y + h + fs.weighted(50)))
-        # fs.put_text(image, fs.count_rect_pixels(image, (x, y, w, h)), (x, y + h + fs.weighted(80)))
+    if rest_condition:
+        if fs.weighted(35) >= h >= fs.weighted(25):
+            cnt = fs.count_pixels_part(image, y, y + h, x + fs.weighted(1))
+            if cnt == 3 and fs.weighted(11) >= w >= fs.weighted(7):
+                fs.put_text(image, "r4", (x, y + h + fs.weighted(20)))
+            elif cnt == 1 and fs.weighted(14) >= w >= fs.weighted(11):
+                fs.put_text(image, "r16", (x, y + h + fs.weighted(20)))
+        elif fs.weighted(22) >= h >= fs.weighted(16):
+            if fs.weighted(15) >= w >= fs.weighted(9):
+                fs.put_text(image, "r8", (x, y + h + fs.weighted(20)))
+        elif fs.weighted(8) >= h:
+            if staff[1] + fs.weighted(5) >= center >= staff[1]:
+                fs.put_text(image, "r1", (x, y + h + fs.weighted(20)))
+            elif staff[2] >= center >= staff[1] + fs.weighted(5):
+                fs.put_text(image, "r2", (x, y + h + fs.weighted(20)))
+
+    if recognize_rest_dot(image, stats):
+        fs.put_text(image, "점", (x, y + h + fs.weighted(50)))
 
     pass
+
+
+def recognize_rest_dot(image, stats):
+    (x, y, w, h, area) = stats
+    area_top = y - fs.weighted(10)  # 쉼표 점을 탐색할 위치 (상단)
+    area_bot = y + fs.weighted(10)  # 쉼표 점을 탐색할 위치 (하단)
+    area_left = x + w  # 쉼표 점을 탐색할 위치 (좌측)
+    area_right = x + w + fs.weighted(10)  # 쉼표 점을 탐색할 위치 (우측)
+    dot_rect = (
+        area_left,
+        area_top,
+        area_right - area_left,
+        area_bot - area_top
+    )
+
+
+    pixels = fs.count_rect_pixels(image, dot_rect)
+    fs.put_text(image, pixels, (x, y + h + fs.weighted(80)))
+    cv2.rectangle(image, dot_rect, (255, 0, 0), 1)
+    return pixels >= fs.weighted(10)

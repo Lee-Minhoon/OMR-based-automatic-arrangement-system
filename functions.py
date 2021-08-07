@@ -10,7 +10,7 @@ def threshold(image):
 
 
 def closing(image):
-    kernel = np.ones((weighted(7), weighted(7)), np.uint8)
+    kernel = np.ones((weighted(5), weighted(5)), np.uint8)
     image = cv2.morphologyEx(image, cv2.MORPH_CLOSE, kernel)
     return image
 
@@ -54,6 +54,18 @@ def count_rect_pixels(image, rect):
         for col in range(x, x + w):
             pixels += (image[row][col] == 255)
     return pixels
+
+
+def count_pixels_part(image, area_top, area_bot, area_col):
+    cnt = 0
+    flag = False
+    for row in range(area_top, area_bot):
+        if not flag and image[row][area_col] == 255:
+            flag = True
+            cnt += 1
+        elif flag and image[row][area_col] == 0:
+            flag = False
+    return cnt
 
 
 def stem_detection(image, stats, length):

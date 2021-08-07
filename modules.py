@@ -119,7 +119,6 @@ def normalization(image, staves, standard):
 def object_detection(image, staves):
     lines = int(len(staves) / 5)  # 보표의 개수
     objects = []  # 구성요소 정보가 저장될 리스트
-    mask = np.zeros(image.shape, np.uint8)  # 보표 영역만 추출하기 위해 마스크 생성
 
     closing_image = fs.closing(image)
     cnt, labels, stats, centroids = cv2.connectedComponentsWithStats(closing_image)  # 모든 객체 검출하기
@@ -131,13 +130,11 @@ def object_detection(image, staves):
                 area_top = staves[line * 5] - fs.weighted(20)  # 위치 조건 (상단)
                 area_bot = staves[(line + 1) * 5 - 1] + fs.weighted(20)  # 위치 조건 (하단)
                 if area_top <= center <= area_bot:
-                    cv2.rectangle(mask, (x, y, w, h), (255, 0, 0), -1)  # 마스킹
                     objects.append([line, (x, y, w, h, area)])  # 객체 리스트에 보표 번호와 객체의 정보(위치, 크기)를 추가
 
-    masked_image = cv2.bitwise_and(image, mask)  # 객체 영역 추출
     objects.sort()  # 보표 번호 → x 좌표 순으로 오름차순 정렬
 
-    return masked_image, objects
+    return image, objects
 
 
 # 5. 객체 분석 과정
@@ -158,7 +155,7 @@ def object_detection(image, staves):
 def object_analysis(image, objects):
     for obj in objects:
         stats = obj[1]
-        stems = fs.stem_detection(image, stats, 30)  # 객체 내의 모든 직선들을 검출함
+        stems = fs.stem_detection(image, stats, 28)  # 객체 내의 모든 직선들을 검출함
         direction = None
         if len(stems) > 0:  # 직선이 1개 이상 존재함
             if stems[0][0] - stats[0] >= fs.weighted(5):  # 직선이 나중에 발견되면
@@ -167,7 +164,6 @@ def object_analysis(image, objects):
                 direction = False  # 역 방향 음표
         obj.append(stems)  # 객체 리스트에 직선 리스트를 추가
         obj.append(direction)  # 객체 리스트에 음표 방향을 추가
-        fs.put_text(image, len(stems), (stats[0], stats[1] + stats[3] + fs.weighted(50)))
 
     return image, objects
 
@@ -188,13 +184,13 @@ def recognition(image, staves, objects):
     pitches = []  # 음이름 리스트
 
     for i in range(1, len(objects) - 1):
-        print(i)
         obj = objects[i]
         line = obj[0]
         stats = obj[1]
         stems = obj[2]
         direction = obj[3]
         x, y, w, h, area = stats
+        print(i, stems)
         staff = staves[line * 5: (line + 1) * 5]
         if not time_signature:  # 조표가 완전히 탐색되지 않음 (아직 박자표를 찾지 못함)
             ts, temp_key = rs.recognize_key(image, staff, stats)
@@ -210,7 +206,7 @@ def recognition(image, staves, objects):
             else:
                 rs.recognize_rest(image, staff, stats)
 
-        cv2.rectangle(image, (x, y, w, h), (255, 0, 0), 1)
+        # cv2.rectangle(image, (x, y, w, h), (255, 0, 0), 1)
         fs.put_text(image, i, (x, y - fs.weighted(20)))
 
     return image, key, beats, pitches
