@@ -4,18 +4,7 @@ import numpy as np
 import functions as fs
 import recognition_modules as rs
 
-# 1. 보표 영역 추출 및 그 외 노이즈 제거
-# ======================================================================================================================
-'''
-0. 원본 이미지가 입력된다.
-1. 이미지 이진화 후 윤곽선 검출을 통해 모든 객체들을 검출할 수 있다.
-2. 이미지 전체 넓이의 50% 이상인 객체만을 걸러냄으로써 보표 영역을 추출할 수 있다.
-3. 추출한 보표 영역만을 마스킹한 마스크 이미지를 준비한다.
-4. 마스크 이미지를 이용해 원본 영상에서 보표 영역을 제외한 노이즈를 제거할 수 있다.
-5. 노이즈가 제거된 이미지를 반환한다.
-- 객체(obj) : [y 좌표, x 좌표, 넓이, 높이]
-'''
-# ======================================================================================================================
+
 def remove_noise(image):
     image = fs.threshold(image)  # 이미지 이진화
     mask = np.zeros(image.shape, np.uint8)  # 보표 영역만 추출하기 위해 마스크 생성
@@ -24,25 +13,13 @@ def remove_noise(image):
     for i in range(1, cnt):
         x, y, w, h, area = stats[i]
         if w > image.shape[1] * 0.5:  # 보표 영역에만
-            cv2.rectangle(mask, (x, y, w, h), (255, 0, 0), -1)  # 마스킹
+            cv2.rectangle(mask, (x, y, w, h), (255, 0, 0), -1)  # 사각형 그리기
 
     masked_image = cv2.bitwise_and(image, mask)  # 보표 영역 추출
 
     return masked_image
 
 
-# 2. 오선 제거
-# ======================================================================================================================
-'''
-0. 보표 영역을 제외한 노이즈가 제거된 이미지가 입력된다.
-1. 보표와 마찬가지로 오선도 이미지 내에서 길게 존재한다.
-2. 수평 히스토그램을 사용해 오선이 포함된 행을 검출할 수 있다.
-3. 다른 객체들의 모양을 훼손하지 않기 위해 오선 위 아래로 픽셀의 존재 여부를 검사한다.
-4. 위 아래로 픽셀이 존재하지 않으면 해당 좌표의 픽셀을 제거한다.
-5. 오선이 제거된 이미지와 오선 y 좌표가 담긴 리스트를 반환한다.
-- 오선 리스트(staves) : [y 좌표, y 좌표, y 좌표 ... ]
-'''
-# ======================================================================================================================
 def remove_staves(image):
     height, width = image.shape
     staves = []  # 오선의 좌표들이 저장될 리스트
@@ -68,20 +45,8 @@ def remove_staves(image):
     return image, [x[0] for x in staves]
 
 
-# 3. 악보 이미지 정규화
-# ======================================================================================================================
-'''
-0. 오선이 제거된 이미지와 오선 리스트, 칸 간격을 입력 받는다.
-1. 작은 보표기준 5개의 오선이 존재하고 4개의 칸이 존재한다.
-2. 존재하는 모든 칸의 높이를 구해 평균치를 낸다.
-3. 칸의 평균 높이를 이용해 어떤 악보가 입력되던 항상 같은 오선 간격(칸)을 가지게 할 수 있다.
-4. 이는 추후 탐색과정에서 이점으로 작용된다.
-5. 정규화된 이미지와, 오선 y 좌표 리스트를 반환한다.
-- 오선 리스트(staves) : [y 좌표, y 좌표, y 좌표 ... ]
-'''
-# ======================================================================================================================
 def normalization(image, staves, standard):
-    avg_distance = 0  # 오선 평균 길이
+    avg_distance = 0
     lines = int(len(staves) / 5)  # 보표의 개수
     for line in range(lines):
         for staff in range(4):
@@ -98,24 +63,10 @@ def normalization(image, staves, standard):
     image = cv2.resize(image, (new_width, new_height))  # 이미지 리사이징
     ret, image = cv2.threshold(image, 127, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)  # 이미지 이진화
     staves = [x * weight for x in staves]  # 오선 좌표에도 가중치를 곱해줌
-    # for x in staves:
-    #     x *= weight
 
     return image, staves
 
 
-# 4. 객체 검출 과정
-# ======================================================================================================================
-'''
-0. 정규화된 이미지, 오선 리스트를 입력받는다.
-1. 윤곽선 검출을 통해 이미지에 존재하는 모든 객체들을 검출할 수 있다.
-2. 악보에 존재할 수 있는 구성요소들의 조건을 이용해 객체를 걸러 준다.
-3. 거르는 과정에서 해당 구성요소가 몇 번째 보표에 속해있는지 탐색한다.
-4. 추출된 객체만 남은 이미지와, 구성요소 리스트를 반환한다.
-- 객체(obj) : [y 좌표, x 좌표, 넓이, 높이]
-- 구성요소 리스트(components) : [[보표 번호, [객체]], [보표 번호, [객체]], [보표 번호, [객체]] ... ]
-'''
-# ======================================================================================================================
 def object_detection(image, staves):
     lines = int(len(staves) / 5)  # 보표의 개수
     objects = []  # 구성요소 정보가 저장될 리스트
@@ -137,25 +88,10 @@ def object_detection(image, staves):
     return image, objects
 
 
-# 5. 객체 분석 과정
-# ======================================================================================================================
-'''
-0. 객체가 검출된 이미지와 구성요소 리스트를 입력받는다.
-1. 객체를 인식하기 이전에 악보의 구성요소들이 가지고 있는 특징점들을 추출한다.
-2. 음표는 직선(stem)이 있을 수 있고 직선이 있다면 방향이 2가지 존재한다.
-3. 직선은 수직 히스토그램을 통해 추출할 수 있다.
-4. 직선이 얼마나 빨리 탐색되냐에 따라 음표의 방향을 알 수 있다.
-5. 해당 특징점들을 미리 추출해 추후 인식 과정에 사용할 수 있다.
-6. 직선 리스트와 음표 방향이 추가된 객체 리스트를 반환한다.
-- 직선(stem) : [x 좌표, y 좌표, 넓이, 높이]
-- 직선 리스트(stems) : [직선, 직선, 직선 ... ]
-- 구성요소 리스트(components) : [[보표 번호, [객체], [직선 리스트], [음표 방향]] ... ]
-'''
-# ======================================================================================================================
 def object_analysis(image, objects):
     for obj in objects:
         stats = obj[1]
-        stems = fs.stem_detection(image, stats, 28)  # 객체 내의 모든 직선들을 검출함
+        stems = fs.stem_detection(image, stats, 30)  # 객체 내의 모든 직선들을 검출함
         direction = None
         if len(stems) > 0:  # 직선이 1개 이상 존재함
             if stems[0][0] - stats[0] >= fs.weighted(5):  # 직선이 나중에 발견되면
@@ -168,15 +104,6 @@ def object_analysis(image, objects):
     return image, objects
 
 
-# 6. 객체 인식 과정
-# ======================================================================================================================
-'''
-0. 이미지와 오선 리스트, 구성요소 리스트를 입력받는다.
-1. 모든 객체를 인식 알고리즘을 통해 조표, 음표, 쉼표, 기타로 분류한다.
-2. 음표로 분류된다면 오선의 좌표와 음표 머리의 좌표를 통해 음의 높낮이를 알 수 있다.
-- 구성요소 리스트(components) : [[보표 번호, [객체], [직선 리스트], [음표 방향]] ... ]
-'''
-# ======================================================================================================================
 def recognition(image, staves, objects):
     key = 0
     time_signature = False
@@ -189,13 +116,14 @@ def recognition(image, staves, objects):
         stats = obj[1]
         stems = obj[2]
         direction = obj[3]
-        x, y, w, h, area = stats
-        print(i, stems)
+        (x, y, w, h, area) = stats
         staff = staves[line * 5: (line + 1) * 5]
         if not time_signature:  # 조표가 완전히 탐색되지 않음 (아직 박자표를 찾지 못함)
             ts, temp_key = rs.recognize_key(image, staff, stats)
             time_signature = ts
             key += temp_key
+            if time_signature:
+                fs.put_text(image, key, (x, y + h + fs.weighted(30)))
         else:  # 조표가 완전히 탐색되었음
             notes = rs.recognize_note(image, staff, stats, stems, direction)
             if len(notes[0]):
@@ -204,9 +132,17 @@ def recognition(image, staves, objects):
                 for pitch in notes[1]:
                     pitches.append(pitch)
             else:
-                rs.recognize_rest(image, staff, stats)
+                rest = rs.recognize_rest(image, staff, stats)
+                if rest:
+                    beats.append(rest)
+                    pitches.append(-1)
+                else:
+                    whole_note, pitch = rs.recognize_whole_note(image, staff, stats)
+                    if whole_note:
+                        beats.append(whole_note)
+                        pitches.append(pitch)
 
-        # cv2.rectangle(image, (x, y, w, h), (255, 0, 0), 1)
+        cv2.rectangle(image, (x, y, w, h), (255, 0, 0), 1)
         fs.put_text(image, i, (x, y - fs.weighted(20)))
 
     return image, key, beats, pitches

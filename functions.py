@@ -3,10 +3,19 @@ import cv2
 import numpy as np
 
 
+VERTICAL = True
+HORIZONTAL = False
+
+
 def threshold(image):
     image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    ret, image = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+    ret, image = cv2.threshold(image, 127, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
     return image
+
+
+def weighted(value):
+    standard = 10
+    return int(value * (standard / 10))
 
 
 def closing(image):
@@ -15,36 +24,46 @@ def closing(image):
     return image
 
 
-def detect_objects(image):
-    objects = []
-    contours, hierarchy = cv2.findContours(image, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    for contour in contours:
-        objects.append(cv2.boundingRect(contour))
-    return objects
-
-
 def put_text(image, text, loc):
     font = cv2.FONT_HERSHEY_SIMPLEX
-    cv2.putText(image, str(text), loc, font, 0.5, (255, 0, 0), 2)
+    cv2.putText(image, str(text), loc, font, 0.6, (255, 0, 0), 2)
 
 
 def get_center(y, h):
     return (y + y + h) / 2
 
 
-def get_line(image, axis, axis_value, line, length):
+def get_line(image, axis, axis_value, start, end, length):
+    if axis:
+        points = [(i, axis_value) for i in range(start, end)]  # 수직 탐색
+    else:
+        points = [(axis_value, i) for i in range(start, end)]  # 수평 탐색
+    end_point = 0
     pixels = 0
-    points = [(axis_value, x) for x in range(line[0], line[1])] if axis else [(x, axis_value) for x in range(line[0], line[1])]
-    for point in points:
-        pixels += (image[point[0]][point[1]] == 255)
-        if image[point[0] + 1][point[1]] == 0:
+    for i in range(len(points)):
+        (y, x) = points[i]
+        pixels += (image[y][x] == 255)  # 흰색 픽셀의 개수를 셈
+        next_point = image[y + 1][x] if axis else image[y][x + 1]  # 다음 탐색할 지점
+        if next_point == 0 or i == len(points) - 1:  # 선이 끊기거나 마지막 탐색임
+            end_point = y if axis else x
             if pixels >= weighted(length):
-                break
+                break  # 찾는 길이의 직선을 찾았으므로 탐색을 중지함
             else:
-                pixels = 0
-    if pixels < weighted(length):
-        pixels = 0
-    return point[1] if axis else point[0], pixels - 1
+                pixels = 0  # 찾는 길이에 도달하기 전에 선이 끊김 (남은 범위 다시 탐색)
+    return end_point, pixels
+
+
+def stem_detection(image, stats, length):
+    (x, y, w, h, area) = stats
+    stems = []  # 기둥 정보 (x, y, w, h)
+    for col in range(x, x + w):
+        end, pixels = get_line(image, VERTICAL, col, y, y + h, length)
+        if pixels:
+            if len(stems) == 0 or abs(stems[-1][0] + stems[-1][2] - col) >= 1:
+                stems.append([col, end - pixels + 1, 1, pixels])
+            else:
+                stems[-1][2] += 1
+    return stems
 
 
 def count_rect_pixels(image, rect):
@@ -52,7 +71,8 @@ def count_rect_pixels(image, rect):
     pixels = 0
     for row in range(y, y + h):
         for col in range(x, x + w):
-            pixels += (image[row][col] == 255)
+            if image[row][col] == 255:
+                pixels += 1
     return pixels
 
 
@@ -66,22 +86,3 @@ def count_pixels_part(image, area_top, area_bot, area_col):
         elif flag and image[row][area_col] == 0:
             flag = False
     return cnt
-
-
-def stem_detection(image, stats, length):
-    x, y, w, h, area = stats
-    stems = []
-    for col in range(x, x + w):
-        row_range = (y, y + h)
-        row, pixels = get_line(image, False, col, row_range, length)
-        if pixels > weighted(length):
-            if len(stems) == 0 or abs(stems[-1][0] + stems[-1][2] - col) > 1:
-                stems.append([col, row - pixels, 0, pixels])
-            else:
-                stems[-1][2] += 1
-    return stems
-
-
-def weighted(value):
-    standard = 10
-    return int(value * (standard / 10))
